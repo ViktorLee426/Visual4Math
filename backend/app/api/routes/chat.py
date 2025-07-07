@@ -16,3 +16,4 @@ async def chat_with_ai(request: ChatRequest):
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     return {"filename": file.filename}
+

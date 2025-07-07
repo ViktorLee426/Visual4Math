@@ -1,6 +1,8 @@
 // src/pages/ChatPage.tsx
 import { useState } from "react";
 import { sendMessageToChatbot } from "../services/chatApi";
+import { generateImageFromPrompt } from "../services/imageApi";
+
 
 
 type Message = {
@@ -52,6 +54,40 @@ export default function ChatPage() {
       ]);
     }
   };
+  
+  const handleGenerateImage = async () => {
+    if (!input.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now(),
+      sender: "user",
+      content: input,
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    try {
+      const imageUrl = await generateImageFromPrompt(input);
+      const imageMessage: Message = {
+        id: Date.now() + 1,
+        sender: "ai",
+        content: "Here is the generated image:",
+        image: imageUrl,
+      };
+      setMessages((prev) => [...prev, imageMessage]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          sender: "ai",
+          content: "Failed to generate image.",
+        },
+      ]);
+    }
+
+    setInput("");
+  };
+
 
 
   // render the chat interface
@@ -110,6 +146,15 @@ export default function ChatPage() {
           >
             Send
           </button>
+
+          <button
+            type="button"
+            onClick={handleGenerateImage}
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+          >
+            Generate Image
+          </button>
+        
         </form>
       </footer>
     </div>

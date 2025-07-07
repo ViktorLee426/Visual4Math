@@ -17,3 +17,13 @@ def get_openai_response(user_input: str) -> str:
         ]
     )
     return response.choices[0].message.content
+
+# add the image generation function
+def generate_image(prompt: str) -> str:
+    response = client.images.generate(
+        model="dall-e-3",  # or "dall-e-2" if you're limited
+        prompt=prompt,
+        n=1,
+        size="1024x1024"
+    )
+    return response.data[0].url
