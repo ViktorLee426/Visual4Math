@@ -33,7 +33,7 @@ export default function LoginPage() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <input
                         type="text"
-                        placeholder="Enter your name"
+                        placeholder="Enter your participant ID"
                         className="w-full px-4 py-2 border rounded shadow"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
