@@ -4,6 +4,11 @@ import os
 from dotenv import load_dotenv
 from typing import List, Optional
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
@@ -12,13 +17,18 @@ client = OpenAI(api_key=api_key)
 # Helper Functions
 def build_openai_messages(request: ChatRequest) -> List[dict]:
     """Convert ChatRequest to OpenAI message format"""
-    messages = [{
-        "role": "system", 
-        "content": "You are Visual4Math, an expert mathematical assistant. You goal is to help teachers to genereate mathmetical visuals that illustrate math word problems."
-    }]
+    logger.info("🔧 Building OpenAI messages from conversation history...")
+    logger.info(f"📝 Conversation history length: {len(request.conversation_history)} messages")
+    
+    # Start with empty messages - no system prompt for clean ChatGPT-like experience
+    messages = []
     
     # Add conversation history
-    for msg in request.conversation_history:
+    for i, msg in enumerate(request.conversation_history):
+        logger.info(f"📜 Processing history message {i+1}: {msg.role} - {msg.content[:100]}..." + ("" if len(msg.content) <= 100 else "..."))
+        if msg.image_url:
+            logger.info(f"🖼️ Message {i+1} includes image: {msg.image_url[:50]}...")
+            
         if msg.role == "user":
             if msg.image_url:
                 # User message with image
@@ -47,12 +57,15 @@ def build_openai_messages(request: ChatRequest) -> List[dict]:
                         {"type": "image_url", "image_url": {"url": msg.image_url}}
                     ]
                 })
+                logger.info(f"🔄 Added assistant text + image as user context for future conversation")
             else:
                 # Text-only assistant message
                 messages.append({"role": "assistant", "content": msg.content})
     
     # Add current user input
+    logger.info(f"➕ Adding current user input: {request.user_input[:100]}..." + ("" if len(request.user_input) <= 100 else "..."))
     if request.user_image:
+        logger.info(f"📸 Current message includes image: {request.user_image[:50]}...")
         messages.append({
             "role": "user",
             "content": [
@@ -63,159 +76,208 @@ def build_openai_messages(request: ChatRequest) -> List[dict]:
     else:
         messages.append({"role": "user", "content": request.user_input})
     
+    logger.info(f"✅ Built {len(messages)} messages for OpenAI API (including system message)")
     return messages
 
 def analyze_intent(request: ChatRequest) -> str:
-    """Use GPT-4 to determine if user wants text, image, or both"""
+    """Use GPT-4o to determine if user wants text or image"""
+    logger.info("🧠 Analyzing user intent with GPT-4o...")
+
     analysis_prompt = f"""Analyze this user request and determine the output modality needed.
 
 User input: "{request.user_input}"
 
-Respond with exactly one word:
-- "text" - if user wants explanation/answer in text only
-- "image" - if user wants visual/diagram as output only  
-- "both" - if user wants explanation AND visual in the output at the same time
+Analyze user's input and decide the modality of the output. You will respond with exactly one word:
+
+- "text" - if user wants explanation/answer in text (DEFAULT - use this unless explicitly asking for visuals)
+- "image" - if user explicitly wants visual/diagram as output
 
 Output modality:"""
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": analysis_prompt}],
-        max_tokens=10,
-        temperature=0
-    )
-    
-    result = response.choices[0].message.content.strip().lower()
-    return result if result in ["text", "image", "both"] else "text"
+    try:
+        logger.info("🔗 DEBUG: Connecting to OpenAI for intent analysis...")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": analysis_prompt}],
+            max_tokens=10,
+            temperature=0
+        )
+        
+        raw_result = response.choices[0].message.content
+        result = raw_result.strip().lower() if raw_result else ""
+        # Only accept text or image as valid intents
+        final_intent = "text" if result != "image" else "image"
+        logger.info(f"� DEBUG: GPT-4o intent analysis result: '{result}', final intent: '{final_intent}'")
+        
+        return final_intent
+    except Exception as e:
+        logger.error(f"❌ Intent analysis failed: {type(e).__name__}: {e}")
+        logger.info("🔄 Falling back to 'text' intent")
+        return "text"
+
 
 def get_text_response(request: ChatRequest) -> str:
     """Get text response from GPT"""
+    logger.info("📝 Generating text response..., function call from openai_service.py, with get_text_response()")
     messages = build_openai_messages(request)
     
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        stream=False  # Keep non-streaming for now, will add streaming endpoint separately
-    )
-    return response.choices[0].message.content
+    try:
+        logger.info(f"🔗 DEBUG: Connecting to OpenAI for text generation...")
+        logger.info(f"🤖 DEBUG: Using model 'gpt-4o' for text generation")
+        logger.info(f"📊 DEBUG: Sending {len(messages)} messages to OpenAI")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            stream=False  # Keep non-streaming for now, will add streaming endpoint separately
+        )
+        text_result = response.choices[0].message.content
+        logger.info(f"✅ Text response generated successfully: {len(text_result)} characters")
+        logger.info(f"📄 Response preview: {text_result[:200]}..." + ("" if len(text_result) <= 200 else "..."))
+        return text_result
+    except Exception as e:
+        logger.error(f"❌ Text generation failed: {type(e).__name__}: {e}")
+        raise e
 
 def get_text_response_stream(request: ChatRequest):
     """Get streaming text response from GPT"""
+    logger.info("🌊 Generating streaming text response..., function call from openai_service.py, with get_text_response_stream()")
     messages = build_openai_messages(request)
     
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        stream=True
-    )
-    
-    for chunk in response:
-        if chunk.choices[0].delta.content is not None:
-            yield chunk.choices[0].delta.content
+    try:
+        logger.info("🔗 DEBUG: Connecting to OpenAI for streaming text generation...")
+        logger.info("🤖 DEBUG: Using model 'gpt-4o' for streaming text generation")
+        logger.info(f"📊 DEBUG: Sending {len(messages)} messages to OpenAI")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            stream=True
+        )
+        
+        logger.info("✅ Streaming response started")
+        chunk_count = 0
+        for chunk in response:
+            if chunk.choices[0].delta.content is not None:
+                chunk_count += 1
+                yield chunk.choices[0].delta.content
+        logger.info(f"✅ Streaming complete: {chunk_count} chunks sent")
+    except Exception as e:
+        logger.error(f"❌ Streaming text generation failed: {type(e).__name__}: {e}")
+        raise e
 
 def get_image_response(request: ChatRequest) -> str:
-    """Generate image using GPT-Image-1"""
+    """Generate image using GPT-4o-image"""
+    logger.info("🎨 Starting image generation..., function call from openai_service.py, with get_image_response()")
+    logger.info(f"🔍 DEBUG: Full user input for image generation: '{request.user_input}'")
+    logger.info(f"📏 DEBUG: User input length: {len(request.user_input)} characters")
+    
     try:
         # Build complete context from conversation history
         context = ""
         for msg in request.conversation_history:
             context += f"{msg.role}: {msg.content}\n"
         
-        prompt = f"""Create a clear, educational mathematical visualization.
+        prompt = f"""Create a clear, educational mathematical visualization 
 
 Conversation context:
 {context}
 
 Current request: {request.user_input}
 
-Create an mathematical visual to illustrate the user's request of the math word problem."""
+Create a detailed, mathematically precise visual illustration for this educational scenario. """
         
-        print(f"🎨 Generating mathematical visualization...")
+        logger.info(f"🖼️ DEBUG: Image prompt prepared: {len(prompt)} characters")
+        logger.info(f"🎨 DEBUG: Generating mathematical visualization...")        
+        # Make the API call with GPT-4o's image generation capability
+        logger.info(f"🤖 DEBUG: Using model 'gpt-4o-image' for image generation...")
         
-        # Make the API call
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
             n=1,
             size="1024x1024"
         )
+
+        logger.info(f"📦 DEBUG: Response type: {type(response)}")
+        logger.info(f"📦 DEBUG: Response data length: {len(response.data) if response.data else 0}")
         
         if response.data and len(response.data) > 0:
             image_data = response.data[0]
+            logger.info(f"📦 DEBUG: Received image data: {type(image_data)}")
             
-            # Handle base64 response (expected format)
-            if hasattr(image_data, 'b64_json') and image_data.b64_json:
+            # GPT-4o-image with URL format - prioritize URL for efficiency
+            if hasattr(image_data, 'url') and image_data.url:
+                logger.info(f"✅ Image generated successfully (URL format): {image_data.url}")
+                return image_data.url
+            # Fallback for base64 response (if available)
+            elif hasattr(image_data, 'b64_json') and image_data.b64_json:
                 base64_data = image_data.b64_json
                 data_url = f"data:image/png;base64,{base64_data}"
-                print(f"✅ Image generated successfully")
+                logger.info(f"✅ Image generated successfully (base64 format): {len(base64_data)} chars")
+                logger.info(f"🔗 DEBUG: Base64 data URL created: data:image/png;base64,{base64_data[:50]}...")
                 return data_url
-            # Fallback for URL response
-            elif hasattr(image_data, 'url') and image_data.url:
-                print(f"✅ Image generated successfully")
-                return image_data.url
             else:
-                print("❌ No image data found in response")
+                logger.error("❌ No image data found in response - missing both url and b64_json")
+                logger.info(f"🔍 Available attributes: {dir(image_data)}")
+                if hasattr(image_data, '__dict__'):
+                    logger.info(f"🔍 Image data dict: {image_data.__dict__}")
                 return ""
         else:
-            print("❌ No image data in response")
+            logger.error("❌ No image data in response - empty response.data")
             return ""
             
     except Exception as e:
-        print(f"❌ Image generation failed: {str(e)}")
+        logger.error(f"❌ Image generation failed: {type(e).__name__}: {e}")
+        logger.error(f"🔍 Full error details: {str(e)}")
         raise e
 
-def process_conversation(request: ChatRequest) -> ChatResponse:
+def process_conversation(request: ChatRequest, intent: str = None) -> ChatResponse:
     """Main function: Process user input and return appropriate response"""
+    logger.info("🚀 Starting conversation processing... function call from openai_service.py, with process_conversation()")
+    
     if not request.user_input.strip():
+        logger.warning("⚠️ Empty user input received")
         return ChatResponse(
             type="text",
             content="Please provide a message or question.",
             image_url=None
         )
     
-    # Analyze what the user wants
-    intent = analyze_intent(request)
-    print(f"🧠 Detected intent: {intent} for input: '{request.user_input}'")
-    
+    # Only analyze intent if not provided
+    if intent is None:
+        logger.info("🧠 No intent provided, analyzing user intent...")
+        intent = analyze_intent(request)
+    else:
+        logger.info(f"🧠 Using provided intent: {intent}")
+
     try:
         if intent == "text":
             # Just text response
-            print("📝 Processing text-only response...")
+            logger.info("📝 DEBUG: Processing text-only response...")
             text_content = get_text_response(request)
-            return ChatResponse(
+            result = ChatResponse(
                 type="text",
                 content=text_content,
                 image_url=None
             )
+            logger.info(f"✅ DEBUG: Text-only response complete: {len(text_content)} characters")
+            return result
         
         elif intent == "image":
-            print("🎨 Processing image-only response...")
+            logger.info("🎨 DEBUG: Processing image-only response...")
             image_url = get_image_response(request)
-            return ChatResponse(
+            result = ChatResponse(
                 type="image",
                 content="Here's the mathematical visual that you requested:",
                 image_url=image_url
             )
+            logger.info(f"✅ DEBUG: Image-only response complete: {len(image_url)} chars image URL")
+            return result
         
-        elif intent == "both":
-            # Get text response
-            print("🎯 Processing both text and image response...")
-            enhanced_request = ChatRequest(
-                user_input=f"{request.user_input}\n[Note: A visual diagram will accompany this response.]",
-                user_image=request.user_image,
-                conversation_history=request.conversation_history
-            )
-            text_content = get_text_response(enhanced_request)
-            image_url = get_image_response(request)
-            
-            return ChatResponse(
-                type="both",
-                content=text_content + "\n\n📊 See the diagram above for a visual representation.",
-                image_url=image_url
-            )
+        # We no longer support the "both" modality - removed for simplicity
     
     except Exception as e:
-        print(f"❌ Error in process_conversation: {type(e).__name__}: {e}")
+        logger.error(f"❌ Error in process_conversation: {type(e).__name__}: {e}")
+        logger.error(f"🔍 Full error details: {str(e)}")
         return ChatResponse(
             type="text",
             content="I encountered an error processing your request. Please try again.",

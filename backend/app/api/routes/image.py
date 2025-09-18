@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.openai_service import get_image_response
 from app.schemas.chat import ChatRequest
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class ImagePrompt(BaseModel):

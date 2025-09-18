@@ -13,6 +13,10 @@ export default function ChatInterface() {
   const handleSend = async () => {
     if (!input.trim()) return;
 
+    console.log("🚀 Sending message:", input);
+    console.log("📜 Current conversation history length:", messages.length);
+    console.log("📷 Has image:", !!selectedImage);
+
     // Add user message to conversation
     const userMessage: ChatMessage = {
       role: "user",
@@ -20,16 +24,21 @@ export default function ChatInterface() {
       image_url: selectedImage || undefined
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    // Update messages state immediately with user message
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setIsLoading(true);
 
     try {
-      // Send to backend
+      console.log("📤 Sending to backend with history:", messages.length, "messages");
+      // Send to backend with the updated conversation history (including current message)
       const response: ChatResponse = await sendChatMessage(
         input,
         selectedImage || undefined,
-        messages
+        messages  // This should be the history BEFORE the current message
       );
+
+      console.log("📥 Received response:", response.type, response.content.slice(0, 100));
 
       // Add assistant response to conversation
       const assistantMessage: ChatMessage = {
@@ -39,7 +48,9 @@ export default function ChatInterface() {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      console.log("✅ Message exchange complete");
     } catch (error) {
+      console.error("❌ Chat error:", error);
       const errorMessage: ChatMessage = {
         role: "assistant",
         content: "Sorry, I encountered an error. Please try again."
@@ -148,7 +159,7 @@ export default function ChatInterface() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="w-full p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Ask about math concepts, request diagrams, or describe what you need help with..."
+              placeholder="Ask about math concepts, request diagrams, or describe what you need help with... (Shift+Enter for new line)"
               rows={2}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
