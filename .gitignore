@@ -10,3 +10,7 @@ __pycache__/
 .vite/
 node_modules/
 dist/
+
+.venv/
+
+.cursorrules
