@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  rag-amd64:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./data:/app/data
+      - ./record:/app/record
+    environment:
+      - FLASK_ENV=development
+    env_file:
+      - .env
+    # this spec is important -- ensures the docker image is compatible with the web server
+    platform: linux/amd64

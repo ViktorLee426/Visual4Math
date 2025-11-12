@@ -108,73 +108,106 @@ export class SessionManager {
     }
   }
 
-  // Save phase-specific data
-  public savePhaseData(phase: string, data: any): void {
-    if (!this.participantData) return;
-    
-    // Create a cleaned copy of the data without images
-    let cleanData = data;
-    
-    // For task data, preserve image URLs to ensure proper display
-    // We're now using sessionStorage which is cleared when the browser closes
-    // This provides better user experience by preserving images during the session
-    if (phase.startsWith('closed-task-') || phase.startsWith('open-task-')) {
-      console.log(`Preserving complete conversation data for ${phase}, including images`);
-      // Use the original data with images intact
-      cleanData = data;
+    // Save phase-specific data
+    public savePhaseData(phase: string, data: any): void {
+        if (!this.participantData) return;
+        
+        // Create a cleaned copy of the data without images
+        let cleanData = data;
+        
+        // For task data, trim conversation and keep only lightweight images (URLs or tiny base64)
+        if (phase.startsWith('tool-') || phase.startsWith('closed-task-') || phase.startsWith('open-task-')) {
+            const MAX_MESSAGES = 30; // keep recent messages
+            const MAX_INLINE_IMAGE_CHARS = 20000; // keep tiny inline previews only
+
+            const clone = JSON.parse(JSON.stringify(data));
+            if (clone && Array.isArray(clone.conversation_log)) {
+                // keep only the last N messages
+                if (clone.conversation_log.length > MAX_MESSAGES) {
+                    clone.conversation_log = clone.conversation_log.slice(-MAX_MESSAGES);
+                }
+                // Keep http/https URLs; drop large base64; keep very small base64 previews
+                clone.conversation_log = clone.conversation_log.map((m: any) => {
+                    if (!m) return m;
+                    if (m.image_url && typeof m.image_url === 'string') {
+                        const url: string = m.image_url;
+                        const isInline = url.startsWith('data:image');
+                        const isHttp = url.startsWith('http');
+                        if (isHttp) {
+                            // safe to keep
+                            return m;
+                        }
+                        if (isInline) {
+                            if (url.length <= MAX_INLINE_IMAGE_CHARS) {
+                                return m; // tiny preview ok
+                            }
+                            const { image_url, ...rest } = m;
+                            return rest; // drop large inline
+                        }
+                    }
+                    return m;
+                });
+            }
+            // Do not persist generated_images array (can be very large)
+            if (clone && Array.isArray(clone.generated_images)) {
+                clone.generated_images = [];
+            }
+            cleanData = clone;
+        }
+
+        switch (phase) {
+            case 'consent':
+                this.participantData.consent = cleanData;
+                break;
+            case 'demographics':
+                this.participantData.demographics = cleanData;
+                break;
+            case 'tool-1':
+            case 'closed-task-1':
+                this.participantData.closedTasks.task1 = cleanData;
+                break;
+            case 'closed-task-2':
+                this.participantData.closedTasks.task2 = cleanData;
+                break;
+            case 'open-task-1':
+                this.participantData.openTasks.task1 = cleanData;
+                break;
+            case 'open-task-2':
+                this.participantData.openTasks.task2 = cleanData;
+                break;
+            case 'final-survey':
+                this.participantData.finalSurvey = cleanData;
+                break;
+        }
+        
+        // Save to session storage
+        this.saveSession();
     }
 
-    switch (phase) {
-      case 'consent':
-        this.participantData.consent = cleanData;
-        break;
-      case 'demographics':
-        this.participantData.demographics = cleanData;
-        break;
-      case 'closed-task-1':
-        this.participantData.closedTasks.task1 = cleanData;
-        break;
-      case 'closed-task-2':
-        this.participantData.closedTasks.task2 = cleanData;
-        break;
-      case 'open-task-1':
-        this.participantData.openTasks.task1 = cleanData;
-        break;
-      case 'open-task-2':
-        this.participantData.openTasks.task2 = cleanData;
-        break;
-      case 'final-survey':
-        this.participantData.finalSurvey = cleanData;
-        break;
-    }
-    
-    // Save to session storage
-    this.saveSession();
-  }
+    // Get phase data
+    public getPhaseData(phase: string): any {
+        if (!this.participantData) return null;
 
-  // Get phase data
-  public getPhaseData(phase: string): any {
-    if (!this.participantData) return null;
-
-    switch (phase) {
-      case 'consent':
-        return this.participantData.consent;
-      case 'demographics':
-        return this.participantData.demographics;
-      case 'closed-task-1':
-        return this.participantData.closedTasks.task1;
-      case 'closed-task-2':
-        return this.participantData.closedTasks.task2;
-      case 'open-task-1':
-        return this.participantData.openTasks.task1;
-      case 'open-task-2':
-        return this.participantData.openTasks.task2;
-      case 'final-survey':
-        return this.participantData.finalSurvey;
-      default:
-        return null;
+        switch (phase) {
+            case 'consent':
+                return this.participantData.consent;
+            case 'demographics':
+                return this.participantData.demographics;
+            case 'tool-1':
+            case 'closed-task-1':
+                return this.participantData.closedTasks.task1;
+            case 'closed-task-2':
+                return this.participantData.closedTasks.task2;
+            case 'open-task-1':
+                return this.participantData.openTasks.task1;
+            case 'open-task-2':
+                return this.participantData.openTasks.task2;
+            case 'final-survey':
+                return this.participantData.finalSurvey;
+            default:
+                return null;
+        }
     }
-  }
 
   // Get current participant data
   public getParticipantData(): ParticipantData | null {
@@ -186,28 +219,26 @@ export class SessionManager {
     return this.participantData?.completedPhases.includes(phase) || false;
   }
 
-  // Get next phase in sequence
-  public getNextPhase(currentPhase: string): string {
-    const phaseSequence = [
-      'welcome',
-      'consent', 
-      'demographics',
-      'closed-instructions',
-      'closed-task-1',
-      'closed-task-2',
-      'open-instructions',
-      'open-task-1',
-      'open-task-2',
-      'final-survey',
-      'completion'
-    ];
-    
-    const currentIndex = phaseSequence.indexOf(currentPhase);
-    if (currentIndex >= 0 && currentIndex < phaseSequence.length - 1) {
-      return phaseSequence[currentIndex + 1];
+    // Get next phase in sequence
+    public getNextPhase(currentPhase: string): string {
+        const phaseSequence = [
+            'welcome',
+            'consent', 
+            'demographics',
+            'instructions',
+            'tool-1',
+            'tool-2',
+            'tool-3',
+            'final-survey',
+            'completion'
+        ];
+        
+        const currentIndex = phaseSequence.indexOf(currentPhase);
+        if (currentIndex >= 0 && currentIndex < phaseSequence.length - 1) {
+            return phaseSequence[currentIndex + 1];
+        }
+        return 'completion';
     }
-    return 'completion';
-  }
 
   // Auto-save every 30 seconds
   private startAutoSave(): void {

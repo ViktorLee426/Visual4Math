@@ -1,0 +1,28 @@
+# docker-compose up
+
+version: '3'
+services:
+  rag-docker:
+    container_name: rag-docker
+    # Docker will pull the image from GitHub Container Registry (GHCR)
+    image: 'ghcr.io/eth-peach-lab/competilearn/rag-amd64:latest'
+    restart: always
+    ports: []
+    env_file:
+      - .env
+    # Specifies the network mode created by the ISG group
+    network_mode: 'default-isg'
+    # External storage should be placed in `/var/lib/peachlab/data`
+    volumes:
+      - /var/lib/peachlab/data/competilearn/data:/app/data
+      - /var/lib/peachlab/data/competilearn/record:/app/record
+    # VIRTUAL_HOST and VIRTUAL_PORT map your port to the subdomain
+    # Let's Encrypt ensures HTTPS for your deployment
+    environment:
+      VIRTUAL_HOST: 'alpha.peachhub-cntr1.inf.ethz.ch'
+      VIRTUAL_PORT: '5001'
+      LETSENCRYPT_HOST: 'alpha.peachhub-cntr1.inf.ethz.ch'
+      LETSENCRYPT_EMAIL: 'wangjun@ethz.ch'
+    # Watchtower label enables automatic updates after new images are pushed to GHCR
+    labels:
+      - com.centurylinklabs.watchtower.enable=true

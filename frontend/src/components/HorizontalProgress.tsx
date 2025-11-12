@@ -6,16 +6,11 @@ interface HorizontalProgressProps {
 
 const pages = [
   { id: 1, name: 'Welcome', path: '/' },
-  { id: 2, name: 'Consent Form', path: '/consent' },
-  { id: 3, name: 'Background Survey', path: '/background' },
-  { id: 4, name: 'Closed Task Instructions', path: '/closed-instructions' },
-  { id: 5, name: 'Closed Task 1', path: '/closed-task/1' },
-  { id: 6, name: 'Closed Task 2', path: '/closed-task/2' },
-  { id: 7, name: 'Open Task Instructions', path: '/open-instructions' },
-  { id: 8, name: 'Open Task 1', path: '/open-task/1' },
-  { id: 9, name: 'Open Task 2', path: '/open-task/2' },
-  { id: 10, name: 'Feedback Survey', path: '/final-survey' },
-  { id: 11, name: 'Completion', path: '/completion' }
+  { id: 2, name: 'Instructions', path: '/instructions' },
+  { id: 3, name: 'tool1 - conversational interface', path: '/tool1' },
+  { id: 4, name: 'tool2 - layout-based interface', path: '/tool2' },
+  { id: 5, name: 'tool3 - free manipulation', path: '/tool3' },
+  { id: 6, name: 'Feedback', path: '/feedback' }
 ];
 
 export default function HorizontalProgress({ currentPage }: HorizontalProgressProps) {
@@ -56,42 +51,45 @@ export default function HorizontalProgress({ currentPage }: HorizontalProgressPr
   const progress = ((currentPage - 1) / (totalPages - 1)) * 100;
   
   return (
-    <div className="w-full fixed top-10 left-0 px-4 pt-1 pb-1 bg-white shadow-sm z-10">
-      <div className="flex justify-end items-center max-w-7xl mx-auto">
-        {/* Timer only on the right side */}
-        <div className="text-gray-700 text-xs font-mono">{formatTime(elapsedTime)}</div>
+    <div className="w-full fixed top-0 left-0 bg-white border-b border-gray-200 z-20" style={{ paddingTop: '8px', paddingBottom: '8px' }}>
+      <div className="flex justify-between items-center max-w-7xl mx-auto px-4 mb-2">
+        {/* Left side - empty for now */}
+        <div></div>
+        {/* Timer on the right */}
+        <div className="text-gray-600 text-xs font-mono">{formatTime(elapsedTime)}</div>
       </div>
       
-      {/* Progress bar - stretched and smaller */}
-      <div className="max-w-screen-xl w-full mx-auto mt-1">
-        <div className="h-1 bg-gray-200 rounded-full relative">
+      {/* Progress bar - cleaner design */}
+      <div className="max-w-7xl w-full mx-auto px-4">
+        <div className="h-1 bg-gray-100 rounded-full relative">
           <div 
-            className="h-1 bg-blue-500 rounded-full absolute top-0 left-0" 
+            className="h-1 bg-gray-900 rounded-full absolute top-0 left-0 transition-all duration-300" 
             style={{ width: `${progress}%` }}
           ></div>
           
           {pages.map(page => (
             <div 
               key={page.id}
-              className="absolute top-1/2 transform -translate-y-1/2"
+              className="absolute top-1/2 transform -translate-y-1/2 -translate-x-1/2 cursor-pointer"
               style={{ 
                 left: `${((page.id - 1) / (totalPages - 1)) * 100}%`,
               }}
             >
               <div 
-                className={`w-2 h-2 rounded-full border ${currentPage === page.id 
-                  ? 'bg-blue-500 border-white' 
-                  : currentPage > page.id 
-                    ? 'bg-blue-500 border-blue-500' 
-                    : 'bg-white border-gray-300'
+                className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                  currentPage === page.id 
+                    ? 'bg-gray-900 shadow-md scale-110' 
+                    : currentPage > page.id 
+                      ? 'bg-gray-600 border-2 border-gray-600' 
+                      : 'bg-gray-200 border-2 border-gray-300'
                 }`}
               ></div>
               
-              <div className="absolute top-3 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
-                <span className={`text-[10px] ${currentPage === page.id 
-                  ? 'font-bold text-blue-700' 
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 whitespace-nowrap">
+                <span className={`text-[11px] transition-colors ${currentPage === page.id 
+                  ? 'font-semibold text-gray-900' 
                   : 'font-normal text-gray-500'
-                } bg-white px-1`}>
+                }`}>
                   {page.name}
                 </span>
               </div>

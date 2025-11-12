@@ -20,7 +20,7 @@ class SimpleStorage:
         self.chat_interactions: List[Dict] = []
         
         # Load from file if exists
-        self.data_file = "/Users/viktor/Desktop/Thesis/Visual4Math/backend/simple_data.json"
+        self.data_file = os.getenv("DATA_FILE_PATH", "/app/data/simple_data.json")
         self.load_data()
     
     def save_data(self):

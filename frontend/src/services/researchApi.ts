@@ -1,7 +1,14 @@
 // frontend/src/services/researchApi.ts
 import axios from "axios";
 
-const API_BASE_URL = "http://127.0.0.1:8000/research";
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL =
+  rawBaseUrl !== undefined
+    ? rawBaseUrl.trim().replace(/\/$/, "")
+    : "http://localhost:8000";
+const RESEARCH_BASE_URL = API_BASE_URL
+  ? `${API_BASE_URL}/research`
+  : "/research";
 
 // Interfaces
 export interface ParticipantData {
@@ -65,43 +72,7 @@ export interface SessionData {
 }
 
 // API Functions
-export const registerParticipant = async (participantId: string): Promise<any> => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/participants`, {
-      participant_id: participantId
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error registering participant:', error);
-    throw error;
-  }
-};
-
-export const submitConsent = async (consentData: ConsentData): Promise<any> => {
-  try {
-    console.log("🌐 Making API request to submit consent:", consentData);
-    const response = await axios.post(`${API_BASE_URL}/consent`, consentData);
-    console.log("✅ Consent API response:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error('❌ Error submitting consent:', error);
-    if (axios.isAxiosError(error)) {
-      console.error('❌ Response data:', error.response?.data);
-      console.error('❌ Response status:', error.response?.status);
-    }
-    throw error;
-  }
-};
-
-export const submitDemographics = async (demographicData: DemographicData): Promise<any> => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/demographics`, demographicData);
-    return response.data;
-  } catch (error) {
-    console.error('Error submitting demographics:', error);
-    throw error;
-  }
-};
+// Removed registerParticipant, submitConsent, submitDemographics - not needed anymore
 
 export const submitTask = async (taskData: TaskData): Promise<any> => {
   try {
@@ -132,7 +103,7 @@ export const submitTask = async (taskData: TaskData): Promise<any> => {
     
     console.log('[submitTask] Converted to backend format', backendTaskData);
     
-    const response = await axios.post(`${API_BASE_URL}/tasks`, backendTaskData);
+    const response = await axios.post(`${RESEARCH_BASE_URL}/tasks`, backendTaskData);
     console.log('[submitTask] Successfully submitted task', response.data);
     return response.data;
   } catch (error: any) {
@@ -183,7 +154,7 @@ export const submitSurvey = async (surveyData: SurveyData): Promise<any> => {
     };
 
     console.log('Converting survey data to legacy format:', legacySurveyData);
-    const response = await axios.post(`${API_BASE_URL}/surveys`, legacySurveyData);
+    const response = await axios.post(`${RESEARCH_BASE_URL}/surveys`, legacySurveyData);
     return response.data;
   } catch (error) {
     console.error('Error submitting survey:', error);
@@ -191,52 +162,5 @@ export const submitSurvey = async (surveyData: SurveyData): Promise<any> => {
   }
 };
 
-export const updateSession = async (sessionData: SessionData): Promise<any> => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/sessions`, sessionData);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating session:', error);
-    throw error;
-  }
-};
+// Removed updateSession, getParticipantData - not needed anymore
 
-export const getParticipantData = async (participantId: string): Promise<any> => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/participants/${participantId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error getting participant data:', error);
-    throw error;
-  }
-};
-
-export const getAnalyticsSummary = async (): Promise<any> => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/analytics`);
-    return response.data;
-  } catch (error) {
-    console.error('Error getting analytics:', error);
-    throw error;
-  }
-};
-
-export const exportResearchData = async (): Promise<any> => {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/data-export`);
-    return response.data;
-  } catch (error) {
-    console.error('Error exporting data:', error);
-    throw error;
-  }
-};
-
-export const resetParticipant = async (participantId: string): Promise<any> => {
-  try {
-    const response = await axios.delete(`${API_BASE_URL}/participant/${participantId}/reset`);
-    return response.data;
-  } catch (error) {
-    console.error('Error resetting participant:', error);
-    throw error;
-  }
-};

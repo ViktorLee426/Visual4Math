@@ -1,7 +1,7 @@
 # backend/app/api/routes/image.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.services.openai_service import get_image_response
+from app.services.image_service import get_image_response
 from app.schemas.chat import ChatRequest
 import logging
 

@@ -1,0 +1,35 @@
+# docker-compose.yml - For server deployment
+# This file should be placed in /opt/containers/visual4math/ on the server
+version: '3'
+
+services:
+  visual4math:
+    container_name: visual4math
+    # Docker will pull the image from GitHub Container Registry (GHCR)
+    image: 'ghcr.io/viktorlee426/visual4math:latest'
+    restart: always
+    ports: []
+    env_file:
+      - .env
+    # Specifies the network mode created by the ISG group
+    network_mode: 'default-isg'
+    # External storage should be placed in `/var/lib/peachlab/data`
+    # These volumes persist data outside the container
+    volumes:
+      - /var/lib/peachlab/data/visual4math/data:/app/data
+      - /var/lib/peachlab/data/visual4math/cached_images:/app/cached_images
+    # VIRTUAL_HOST and VIRTUAL_PORT map your port to the subdomain
+    # Let's Encrypt ensures HTTPS for your deployment
+    environment:
+      VIRTUAL_HOST: 'visual4math.peachhub-cntr1.inf.ethz.ch'
+      VIRTUAL_PORT: '8000'
+      LETSENCRYPT_HOST: 'visual4math.peachhub-cntr1.inf.ethz.ch'
+      LETSENCRYPT_EMAIL: 'zhengxli@ethz.ch'  # Update with appropriate email
+      # Application environment variables
+      DATA_FILE_PATH: '/app/data/simple_data.json'
+      CACHE_DIR: '/app/cached_images'
+      ALLOWED_ORIGINS: 'https://visual4math.peachhub-cntr1.inf.ethz.ch'
+    # Watchtower label enables automatic updates after new images are pushed to GHCR
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+

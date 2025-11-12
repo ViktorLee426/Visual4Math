@@ -1,30 +1,22 @@
 // frontend/src/App.tsx
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import WelcomePage from "./pages/LoginPage"; // Using existing file as WelcomePage
-import ConsentPage from "./pages/ConsentPage";
-import DemographicSurveyPage from "./pages/DemographicSurveyPage";
-import ClosedTaskInstructionsPage from "./pages/ClosedTaskInstructionsPage";
-import ClosedTaskPage from "./pages/ClosedTaskPage";
-import OpenTaskInstructionsPage from "./pages/OpenTaskInstructionsPage";
-import OpenTaskPage from "./pages/OpenTaskPage";
+import WelcomePage from "./pages/WelcomePage";
+import InstructionsPage from "./pages/InstructionsPage";
+import Tool1ChatPage from "./pages/Tool1ChatPage";
 import FinalSurveyPage from "./pages/FinalSurveyPage";
-import CompletionPage from "./pages/CompletionPage";
-
-
+import Tool2LayoutPage from "./pages/Tool2LayoutPage";
+import Tool3PanelPage from "./pages/Tool3PanelPage";
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<WelcomePage />} />
-        <Route path="/consent" element={<ConsentPage />} />
-        <Route path="/demographics" element={<DemographicSurveyPage />} />
-        <Route path="/closed-instructions" element={<ClosedTaskInstructionsPage />} />
-        <Route path="/closed-task/:taskId" element={<ClosedTaskPage />} />
-        <Route path="/open-instructions" element={<OpenTaskInstructionsPage />} />
-        <Route path="/open-task/:taskId" element={<OpenTaskPage />} />
-        <Route path="/final-survey" element={<FinalSurveyPage />} />
-        <Route path="/completion" element={<CompletionPage />} />
+        <Route path="/instructions" element={<InstructionsPage />} />
+        <Route path="/tool1" element={<Tool1ChatPage />} />
+        <Route path="/tool2" element={<Tool2LayoutPage />} />
+        <Route path="/tool3" element={<Tool3PanelPage />} />
+        <Route path="/feedback" element={<FinalSurveyPage />} />
       </Routes>
     </Router>
   );

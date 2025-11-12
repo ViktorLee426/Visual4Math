@@ -1,6 +1,13 @@
 # backend/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware # Cross-Origin Resource Sharing
+import os
+from dotenv import load_dotenv
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+
+load_dotenv()
 
 from app.api import router as api_router
 #create FastAPI app instance, this is the core backend server
@@ -13,11 +20,18 @@ app = FastAPI(
     redoc_url="/redoc"  # ReDoc at /redoc
 )
 
-# Allow frontend to connect (adjust if hosted separately)
-# not actually connecting them, but allow them to communicate
+# Allow frontend to connect - configurable via environment variable
+# Default to localhost for development, but should be overridden for deployment
+# In production, set ALLOWED_ORIGINS to include the production domain
+allowed_origins_str = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000"
+)
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # adjust for frontend URL
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,6 +40,33 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router)
 # connects all API routes like /chat, /image
+
+# Serve static assets for the built frontend (only if directory exists)
+# This allows local development where frontend runs separately
+static_assets_path = "static/assets"
+static_index_path = "static/index.html"
+static_favicon_path = "static/favicon.png"
+
+if os.path.exists(static_assets_path):
+    app.mount("/assets", StaticFiles(directory=static_assets_path), name="assets")
+    print(f"✅ Static assets mounted from {static_assets_path}")
+else:
+    print(f"⚠️  Static assets directory not found: {static_assets_path} (frontend not built yet)")
+
+# Serve favicon only if it exists
+if os.path.exists(static_favicon_path):
+    @app.get("/favicon.png")
+    async def favicon():
+        return FileResponse(static_favicon_path)
+
+# Serve index.html for SPA routing (only if it exists)
+# During local dev, frontend runs separately, so this won't be used
+if os.path.exists(static_index_path):
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith(("api", "docs", "redoc")):
+            raise HTTPException(status_code=404)
+        return FileResponse(static_index_path)
 
 if __name__ == "__main__":
     import uvicorn

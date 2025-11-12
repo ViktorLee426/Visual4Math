@@ -2,23 +2,37 @@
 import axios from "axios";
 // TS can not use Python models, so we are definening the Basemodel here in the Frontend. 
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+// Use environment variable if set, otherwise default to local backend
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL =
+  rawBaseUrl !== undefined
+    ? rawBaseUrl.trim().replace(/\/$/, "")
+    : "http://localhost:8000";
 
 // Updated interfaces to match our backend schemas
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   image_url?: string;
+  message_id?: string;  // Unique ID for referencing this message/image
+}
+
+export interface ImageRegion {
+  image_url: string;
+  mask_data?: string;  // Base64 encoded mask
+  coordinates?: any;
 }
 
 export interface ChatRequest {
   user_input: string;
-  user_image?: string;
+  user_image?: string;  // Deprecated - not using anymore
   conversation_history: ChatMessage[];
+  image_region?: ImageRegion;  // For image editing with brush
+  referenced_image_id?: string;  // ID of clicked image
 }
 
 export interface ChatResponse {
-  type: "text" | "image";
+  type: "text_solo" | "image_solo" | "both";
   content: string;
   image_url?: string;
 }
@@ -27,12 +41,16 @@ export interface ChatResponse {
 export const sendChatMessage = async (
   userInput: string,
   userImage?: string,
-  conversationHistory: ChatMessage[] = []
+  conversationHistory: ChatMessage[] = [],
+  imageRegion?: ImageRegion,
+  referencedImageId?: string
 ): Promise<ChatResponse> => {
   console.log("🔗 ChatAPI: Preparing request to backend");
   console.log("📝 User input:", userInput);
-  console.log("📷 User image:", userImage ? "Present" : "None");
   console.log("📜 Conversation history:", conversationHistory.length, "messages");
+  if (imageRegion) {
+    console.log("🎨 Image region provided for editing");
+  }
   
   // Log each message in the history
   conversationHistory.forEach((msg, i) => {
@@ -45,11 +63,14 @@ export const sendChatMessage = async (
   const payload: ChatRequest = {
     user_input: userInput,
     user_image: userImage,
-    conversation_history: conversationHistory
+    conversation_history: conversationHistory,
+    image_region: imageRegion,
+    referenced_image_id: referencedImageId
   };
   
   console.log("📤 Sending payload to backend...");
-  const response = await axios.post<ChatResponse>(`${API_BASE_URL}/chat/`, payload);
+  const url = API_BASE_URL ? `${API_BASE_URL}/chat/` : "/chat/";
+  const response = await axios.post<ChatResponse>(url, payload);
   console.log("📥 Received response from backend:", response.data.type);
   console.log("📝 Response content length:", response.data.content.length);
   
@@ -89,7 +110,8 @@ export const sendChatMessageStream = async (
   };
 
   console.log("📤 Sending streaming request to backend...");
-  const response = await fetch(`${API_BASE_URL}/chat/stream`, {
+  const url = API_BASE_URL ? `${API_BASE_URL}/chat/stream` : "/chat/stream";
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

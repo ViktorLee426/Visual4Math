@@ -2,7 +2,9 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.services.openai_service import process_conversation, get_text_response_stream, analyze_intent
+from app.services.conversation_service import process_conversation
+from app.services.chat_service import get_text_response_stream
+from app.services.intent_service import analyze_intent
 import json
 import logging
 
@@ -65,8 +67,8 @@ async def chat_with_ai_stream(request: ChatRequest):
             
             return StreamingResponse(generate(), media_type="text/plain")
         else:
-            # For image responses, fall back to regular endpoint
-            logger.info(f"🔄 Image intent detected, falling back to regular endpoint...")
+            # For image or both responses, fall back to regular endpoint
+            logger.info(f"🔄 Image/both intent detected, falling back to regular endpoint...")
             # Pass the already analyzed intent to avoid duplicate analysis
             response = process_conversation(request, intent)
             def generate():

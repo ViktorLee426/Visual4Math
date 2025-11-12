@@ -1,6 +1,7 @@
 # backend/app/services/openai_service.py
 from openai import OpenAI
 import os
+# The `dotenv` package loads environment variables from a `.env` file into the environment.
 from dotenv import load_dotenv
 from typing import List, Optional
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse

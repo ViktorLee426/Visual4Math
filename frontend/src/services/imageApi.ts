@@ -1,9 +1,16 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://127.0.0.1:8000"; // or wherever your backend runs
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL =
+  rawBaseUrl !== undefined
+    ? rawBaseUrl.trim().replace(/\/$/, "")
+    : "http://localhost:8000";
 
 export const generateImageFromPrompt = async (prompt: string): Promise<string> => {
-  const res = await axios.post(`${API_BASE_URL}/image/generate-image`, {
+  const url = API_BASE_URL
+    ? `${API_BASE_URL}/image/generate-image`
+    : "/image/generate-image";
+  const res = await axios.post(url, {
     prompt,
   });
   return res.data.image_url; // Assuming backend returns: { "image_url": "https://..." }

@@ -4,6 +4,7 @@ import eth_peach from "../assets/eth_peach.png";
 import { sessionManager } from '../utils/sessionManager';
 import { submitSurvey } from '../services/researchApi';
 import HorizontalProgress from '../components/HorizontalProgress';
+import PageNavigation from '../components/PageNavigation';
 
 interface SurveyQuestion {
     id: string;
@@ -113,9 +114,9 @@ export default function FinalSurveyPage() {
         console.log('Current phase:', session.currentPhase);
         console.log('Completed phases:', session.completedPhases);
         
-        // Check if we came from open-task-2
-        const openTask2Completed = session.completedPhases.includes('open-task-2');
-        console.log('Open task 2 completed:', openTask2Completed);
+        // Check if we came from tool-3
+        const tool3Completed = session.completedPhases.includes('tool-3');
+        console.log('Tool 3 completed:', tool3Completed);
         
         // Remove auto-redirect to completion page to ensure survey is shown
         // if (sessionManager.isPhaseCompleted('final-survey')) {
@@ -196,7 +197,8 @@ export default function FinalSurveyPage() {
             sessionManager.savePhaseData('final-survey', surveyData);
             sessionManager.updatePhase('completion');
 
-            navigate('/completion');
+            // Survey completed - user can stay on this page
+            alert('Thank you for completing the survey! Your responses have been saved.');
 
         } catch (error: any) {
             console.error('Error submitting survey:', error);
@@ -322,7 +324,7 @@ export default function FinalSurveyPage() {
                 />
             </div>
             
-            <HorizontalProgress currentPage={10} />
+            <HorizontalProgress currentPage={6} />
 
             <div className="min-h-screen flex items-center justify-center px-8 pt-24">
                 <div className="max-w-4xl w-full space-y-8">
@@ -379,13 +381,10 @@ export default function FinalSurveyPage() {
                         )}
 
                         <div className="flex justify-between pt-6">
-                            <button
-                                type="button"
-                                onClick={() => navigate('/open-task/2')}
-                                className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                            >
-                                Back to Tasks
-                            </button>
+                            <PageNavigation 
+                                currentPage={6} 
+                                showNext={false}
+                            />
                             
                             <button
                                 type="submit"

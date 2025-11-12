@@ -48,6 +48,7 @@ export const convertImageToBase64 = async (imageUrl: string): Promise<string> =>
       });
     }
     
+    throw new Error("Unable to convert image to base64");
   } catch (error) {
     console.error("❌ Failed to convert image to base64:", error);
     throw error;

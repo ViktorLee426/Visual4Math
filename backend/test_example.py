@@ -2,7 +2,8 @@
 # This shows how the conversation flow would work
 
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse
-from app.services.openai_service import process_conversation, analyze_intent
+from app.services.conversation_service import process_conversation
+from app.services.intent_service import analyze_intent
 
 # Example 1: Text-only question
 def test_text_question():

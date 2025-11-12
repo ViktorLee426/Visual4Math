@@ -7,16 +7,26 @@ from typing import Optional
 import logging
 import hashlib
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Simple in-memory cache for images
 image_cache = {}
-CACHE_DIR = "cached_images"
 
-# Create cache directory if it doesn't exist
-os.makedirs(CACHE_DIR, exist_ok=True)
+# Determine cache directory:
+# 1. honor CACHE_DIR if provided (Docker deployment)
+# 2. otherwise use the project's local cached_images folder (works locally)
+cache_dir_env = os.getenv("CACHE_DIR")
+if cache_dir_env:
+    cache_dir_path = Path(cache_dir_env)
+else:
+    project_root = Path(__file__).resolve().parents[3]
+    cache_dir_path = project_root / "backend" / "cached_images"
+
+cache_dir_path.mkdir(parents=True, exist_ok=True)
+CACHE_DIR = cache_dir_path.as_posix()
 
 @router.get("/proxy")
 async def proxy_image(url: str):
