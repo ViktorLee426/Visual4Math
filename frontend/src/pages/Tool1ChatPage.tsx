@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sessionManager } from '../utils/sessionManager';
 import { exampleItems } from '../data/examples';
-import { sendChatMessage } from "../services/chatApi";
+import { sendChatMessage, sendChatMessageStreamImage, sendChatMessageStreamUnified } from "../services/chatApi";
 import type { ChatMessage, ImageRegion } from "../services/chatApi";
 import MarkdownText from "../components/MarkdownText";
 import HorizontalProgress from '../components/HorizontalProgress';
@@ -16,9 +16,9 @@ export default function Tool1ChatPage() {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [pendingImage, setPendingImage] = useState(false); // show image placeholder while editing/generating
     const [abortController, setAbortController] = useState<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const generatingTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map()); // Track timers for each message
     
     // Image editing state
     const [editingImage, setEditingImage] = useState<string | null>(null);
@@ -63,10 +63,16 @@ export default function Tool1ChatPage() {
         sessionManager.updatePhase(`tool-1`);
     }, [navigate]);
 
-    // Auto-scroll to bottom when messages change
+    // Auto-scroll is handled manually when image generation completes
+    // This allows free scrolling during generation
+    
+    // Cleanup timers on unmount
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages, isLoading]);
+        return () => {
+            generatingTimersRef.current.forEach(timer => clearInterval(timer));
+            generatingTimersRef.current.clear();
+        };
+    }, []);
 
     // Save progress automatically
     useEffect(() => {
@@ -104,10 +110,12 @@ export default function Tool1ChatPage() {
         const targetImageUrl = imageUrl || editingImage;
         if (!targetImageUrl) return;
 
+
         const userMessage: ChatMessage = {
             role: "user",
             content: instruction,
-            message_id: generateMessageId()
+            message_id: generateMessageId(),
+            image_url: targetImageUrl  // Include image URL in user message for thumbnail
         };
 
         setMessages((prev: ChatMessage[]) => [...prev, userMessage]);
@@ -127,24 +135,9 @@ export default function Tool1ChatPage() {
             };
         }
 
-        console.log("🎨 Image modification request", maskData ? "(with mask)" : "(text-based)");
-
-        // Check if request is likely to generate an image
-        // Be VERY conservative - only show image placeholder if we're absolutely certain
-        const hasImageInHistory = messages.some(msg => msg.image_url);
         
-        // Only show image placeholder if:
-        // 1. There's an image in history (modification request) - this is certain
-        // For new image requests, default to "Thinking..." and let the response type determine it
-        // This prevents showing "Creating image..." for requests that might return text
-        if (hasImageInHistory) {
-            // Modification request - definitely will generate image
-            setPendingImage(true);
-        } else {
-            // New request - default to text, will update if response is actually image
-            // This is more conservative and prevents misleading messages
-            setPendingImage(false);
-        }
+        // Capture start time in closure for timing calculation
+        const startTime = Date.now();
 
         setIsLoading(true);
         setIsEditorOpen(false);
@@ -153,59 +146,177 @@ export default function Tool1ChatPage() {
         const controller = new AbortController();
         setAbortController(controller);
 
+        const placeholderMessageId = generateMessageId();
+        const timerStartTime = Date.now();
+        
         try {
-            const response = await sendChatMessage(
-                instruction,
-                undefined,
-                conversationHistory,
-                imageRegion,
-                undefined
-            );
-            console.log("Response received:", response.type);
-
-            // Update pendingImage based on actual response type IMMEDIATELY
-            // This ensures the loading message matches what we're actually doing
-            // Note: This update happens after response, but helps for future requests
-            if (response.type === "text_solo") {
-                // Text response - ensure we're not showing image placeholder
-                setPendingImage(false);
-            } else if (response.type === "image_solo" || response.type === "both") {
-                // Image response - this was correct, but we already got the response
-                // Set to false since we're done loading
-                setPendingImage(false);
-            }
-
-            let content = response.content || "";
-            let imageUrlResponse = response.image_url;
-
-            if (imageUrlResponse && !imageUrlResponse.startsWith('data:') && !imageUrlResponse.startsWith('http')) {
-                console.log("Fixing base64 image format");
-                imageUrlResponse = `data:image/png;base64,${imageUrlResponse}`;
-            }
-
-            const assistantMessage: ChatMessage = {
+            // Try streaming endpoint first (for better UX with status updates)
+            // Backend will handle whether streaming is supported for editing
+            const placeholderMessage: ChatMessage = {
                 role: "assistant",
-                content,
-                image_url: imageUrlResponse,
-                message_id: generateMessageId()
+                content: "Generating... 0.0s",
+                message_id: placeholderMessageId
             };
-
-            setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
+            setMessages((prev: ChatMessage[]) => [...prev, placeholderMessage]);
+            
+            // Start timer for this message
+            const timerInterval = setInterval(() => {
+                const elapsed = ((Date.now() - timerStartTime) / 1000).toFixed(1);
+                setMessages((prev: ChatMessage[]) => 
+                    prev.map(msg => 
+                        msg.message_id === placeholderMessageId && msg.content.includes("Generating")
+                            ? { ...msg, content: `Generating... ${elapsed}s` }
+                            : msg
+                    )
+                );
+            }, 100); // Update every 100ms
+            generatingTimersRef.current.set(placeholderMessageId, timerInterval);
+            
+            try {
+                await sendChatMessageStreamImage(
+                    instruction,
+                    () => {
+                        // Update placeholder message with status
+                        setMessages((prev: ChatMessage[]) => 
+                            prev.map(msg => 
+                                msg.message_id === placeholderMessageId
+                                    ? { ...msg, content: `Generating... ${((Date.now() - timerStartTime) / 1000).toFixed(1)}s` }
+                                    : msg
+                            )
+                        );
+                    },
+                    (imageB64) => {
+                        // Update placeholder message with partial image preview and running timer
+                        const partialImageUrl = `data:image/png;base64,${imageB64}`;
+                        const elapsed = ((Date.now() - timerStartTime) / 1000).toFixed(1);
+                        setMessages((prev: ChatMessage[]) => 
+                            prev.map(msg => 
+                                msg.message_id === placeholderMessageId
+                                    ? { 
+                                        ...msg, 
+                                        image_url: partialImageUrl,
+                                        content: `Generating... ${elapsed}s`
+                                      }
+                                    : msg
+                            )
+                        );
+                    },
+                    (imageUrl) => {
+                        // Stop the timer
+                        const timer = generatingTimersRef.current.get(placeholderMessageId);
+                        if (timer) {
+                            clearInterval(timer);
+                            generatingTimersRef.current.delete(placeholderMessageId);
+                        }
+                        // Calculate elapsed time using captured startTime
+                        const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                        const timeMessage = `Edited in ${elapsedTime}s`;
+                        
+                        // Final edited image with timing
+                        setMessages((prev: ChatMessage[]) => 
+                            prev.map(msg => 
+                                msg.message_id === placeholderMessageId
+                                    ? { ...msg, image_url: imageUrl, content: timeMessage }
+                                    : msg
+                            )
+                        );
+                        
+                        // Auto-scroll to latest message when modification completes
+                        setTimeout(() => {
+                            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        }, 100);
+                    },
+                    async () => {
+                        // Stop the timer on error
+                        const timer = generatingTimersRef.current.get(placeholderMessageId);
+                        if (timer) {
+                            clearInterval(timer);
+                            generatingTimersRef.current.delete(placeholderMessageId);
+                        }
+                        // If streaming fails, fall back to regular endpoint
+                        setMessages((prev: ChatMessage[]) => prev.filter(msg => msg.message_id !== placeholderMessageId));
+                        
+                        // Use regular endpoint
+                        const response = await sendChatMessage(
+                            instruction,
+                            undefined,
+                            conversationHistory,
+                            imageRegion,
+                            undefined
+                        );
+                        
+                        const assistantMessage: ChatMessage = {
+                            role: "assistant",
+                            content: response.content || "Edited",
+                            image_url: response.image_url,
+                            message_id: generateMessageId()
+                        };
+                        setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
+                    },
+                    undefined,
+                    conversationHistory,
+                    imageRegion,
+                    undefined
+                );
+            } catch (streamError: any) {
+                // Fallback to regular endpoint if streaming fails
+                const timer = generatingTimersRef.current.get(placeholderMessageId);
+                if (timer) {
+                    clearInterval(timer);
+                    generatingTimersRef.current.delete(placeholderMessageId);
+                }
+                setMessages((prev: ChatMessage[]) => prev.filter(msg => msg.message_id !== placeholderMessageId));
+                
+                const response = await sendChatMessage(
+                    instruction,
+                    undefined,
+                    conversationHistory,
+                    imageRegion,
+                    undefined
+                );
+                
+                const assistantMessage: ChatMessage = {
+                    role: "assistant",
+                    content: response.content || "Edited",
+                    image_url: response.image_url,
+                    message_id: generateMessageId()
+                };
+                setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
+            }
         } catch (error: any) {
+            // Stop timer on error
+            const timer = generatingTimersRef.current.get(placeholderMessageId);
+            if (timer) {
+                clearInterval(timer);
+                generatingTimersRef.current.delete(placeholderMessageId);
+            }
+            
             if (error.name === 'AbortError') {
-                console.log("Request aborted by user");
+                // Request aborted by user - no error message needed
             } else {
-            console.error("Error sending message:", error);
-            const errorMessage: ChatMessage = {
-                role: "assistant",
-                content: "Sorry, I encountered an error. Please try again.",
-                message_id: generateMessageId()
-            };
-            setMessages((prev: ChatMessage[]) => [...prev, errorMessage]);
+                console.error("Image modification error:", error);
+                
+                // Show error message to user
+                let errorContent = "Sorry, I encountered an error. Please try again.";
+                if (error.response?.status === 504) {
+                    errorContent = "Request timed out (504). The image edit is taking too long. Please try again.";
+                } else if (error.response?.status === 413) {
+                    errorContent = "Request too large (413). Please try with a smaller image or simpler edit.";
+                } else if (error.response?.status) {
+                    errorContent = `Server error (${error.response.status}): ${error.response.statusText || 'Unknown error'}`;
+                } else if (error.message) {
+                    errorContent = `Error: ${error.message}`;
+                }
+                
+                const errorMessage: ChatMessage = {
+                    role: "assistant",
+                    content: errorContent,
+                    message_id: generateMessageId()
+                };
+                setMessages((prev: ChatMessage[]) => [...prev, errorMessage]);
             }
         } finally {
             setIsLoading(false);
-            setPendingImage(false);
             setAbortController(null);
         }
     };
@@ -214,9 +325,7 @@ export default function Tool1ChatPage() {
     const handleSend = async () => {
         if (!input.trim()) return;
 
-        console.log("[handleSend] Starting message send process");
-
-        const currentInput = input || "Edit this image";
+        const currentInput = input;
 
         const userMessage: ChatMessage = {
             role: "user",
@@ -233,82 +342,244 @@ export default function Tool1ChatPage() {
         }));
         const conversationHistory = [...conversationHistoryWithIds, userMessage];
 
-        // Check if request is likely to generate an image
-        // Be VERY conservative - only show image placeholder if we're absolutely certain
-        const hasImageInHistory = messages.some(msg => msg.image_url);
-        
-        // Only show image placeholder if:
-        // 1. There's an image in history (modification request) - this is certain
-        // For new image requests, default to "Thinking..." and let the response type determine it
-        // This prevents showing "Creating image..." for requests that might return text
-        if (hasImageInHistory) {
-            // Modification request - definitely will generate image
-            setPendingImage(true);
-        } else {
-            // New request - default to text, will update if response is actually image
-            // This is more conservative and prevents misleading messages
-            setPendingImage(false);
-        }
-
         setIsLoading(true);
-
-        // Create abort controller for this request
-        const controller = new AbortController();
-        setAbortController(controller);
-
+        
+        const hasImageInHistory = messages.some(msg => msg.image_url);
+        const isModification = hasImageInHistory; // If there's an image in history, likely modification
+        
+        // Use unified streaming endpoint (backend does intent analysis)
+        // Create placeholder only when we detect image generation/modification
+        let placeholderMessageId: string | null = null;
+        let timerStartTime: number | null = null;
+        let startTime = Date.now();
+        let isTextResponse = false; // Track if this is a text response
+        
         try {
-            const response = await sendChatMessage(
+            await sendChatMessageStreamUnified(
                 currentInput,
+                // onTextChunk - for text streaming (no placeholder needed)
+                (chunk: string) => {
+                    isTextResponse = true; // Mark as text response
+                    // Text streaming - create message if doesn't exist, or update existing placeholder
+                    if (!placeholderMessageId) {
+                        placeholderMessageId = generateMessageId();
+                        const textMessage: ChatMessage = {
+                            role: "assistant",
+                            content: chunk,
+                            message_id: placeholderMessageId
+                        };
+                        setMessages((prev: ChatMessage[]) => [...prev, textMessage]);
+                        // Auto-scroll when new text message is created
+                        setTimeout(() => {
+                            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        }, 50);
+                    } else {
+                        // Update existing message (could be placeholder from status, convert to text)
+                        // If it was a placeholder, stop the timer
+                        if (timerStartTime) {
+                            const timer = generatingTimersRef.current.get(placeholderMessageId!);
+                            if (timer) {
+                                clearInterval(timer);
+                                generatingTimersRef.current.delete(placeholderMessageId!);
+                            }
+                            timerStartTime = null;
+                        }
+                        setMessages((prev: ChatMessage[]) => 
+                            prev.map(msg => 
+                                msg.message_id === placeholderMessageId
+                                    ? { ...msg, content: msg.content.includes("Generating") ? chunk : msg.content + chunk }
+                                    : msg
+                            )
+                        );
+                        // Auto-scroll as text streams
+                        setTimeout(() => {
+                            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        }, 50);
+                    }
+                },
+                // onStatus - create placeholder ONLY for image generation (not for text responses)
+                (statusMessage: string) => {
+                    // Only create placeholder if:
+                    // 1. It's NOT a text response (no text chunks received yet)
+                    // 2. Status message indicates image generation (contains "generating" or "image")
+                    // 3. No placeholder exists yet
+                    const isImageStatus = statusMessage.toLowerCase().includes('generating') || 
+                                         statusMessage.toLowerCase().includes('image') ||
+                                         statusMessage.toLowerCase().includes('edit');
+                    
+                    if (!isTextResponse && !placeholderMessageId && isImageStatus) {
+                        placeholderMessageId = generateMessageId();
+                        timerStartTime = Date.now();
+                        const placeholderMessage: ChatMessage = {
+                            role: "assistant",
+                            content: "Generating... 0.0s",
+                            message_id: placeholderMessageId
+                        };
+                        setMessages((prev: ChatMessage[]) => [...prev, placeholderMessage]);
+                        
+                        // Auto-scroll when placeholder is created
+                        setTimeout(() => {
+                            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        }, 50);
+                        
+                        // Start timer
+                        const timerInterval = setInterval(() => {
+                            if (timerStartTime) {
+                                const elapsed = ((Date.now() - timerStartTime) / 1000).toFixed(1);
+                                setMessages((prev: ChatMessage[]) => 
+                                    prev.map(msg => 
+                                        msg.message_id === placeholderMessageId && msg.content.includes("Generating")
+                                            ? { ...msg, content: `Generating... ${elapsed}s` }
+                                            : msg
+                                    )
+                                );
+                            }
+                        }, 100);
+                        generatingTimersRef.current.set(placeholderMessageId, timerInterval);
+                    } else if (timerStartTime && !isTextResponse && isImageStatus) {
+                        // Update placeholder with status (only for image generation)
+                        setMessages((prev: ChatMessage[]) => 
+                            prev.map(msg => 
+                                msg.message_id === placeholderMessageId
+                                    ? { ...msg, content: `Generating... ${((Date.now() - timerStartTime!) / 1000).toFixed(1)}s` }
+                                    : msg
+                            )
+                        );
+                    }
+                    // For generic status messages like "Getting started..." and text responses, do nothing
+                },
+                // onPartialImage - update placeholder with partial image
+                (imageB64: string) => {
+                    if (!placeholderMessageId) {
+                        // Create placeholder if it doesn't exist yet
+                        placeholderMessageId = generateMessageId();
+                        timerStartTime = Date.now();
+                    const placeholderMessage: ChatMessage = {
+                        role: "assistant",
+                            content: "Generating... 0.0s",
+                        message_id: placeholderMessageId
+                    };
+                    setMessages((prev: ChatMessage[]) => [...prev, placeholderMessage]);
+                        
+                        // Start timer
+                        const timerInterval = setInterval(() => {
+                            if (timerStartTime) {
+                                const elapsed = ((Date.now() - timerStartTime) / 1000).toFixed(1);
+                                setMessages((prev: ChatMessage[]) => 
+                                    prev.map(msg => 
+                                        msg.message_id === placeholderMessageId && msg.content.includes("Generating")
+                                            ? { ...msg, content: `Generating... ${elapsed}s` }
+                                            : msg
+                                    )
+                                );
+                            }
+                        }, 100);
+                        generatingTimersRef.current.set(placeholderMessageId, timerInterval);
+                    }
+                    
+                    // Update with partial image
+                    const partialImageUrl = `data:image/png;base64,${imageB64}`;
+                    const elapsed = timerStartTime ? ((Date.now() - timerStartTime) / 1000).toFixed(1) : "0.0";
+                            setMessages((prev: ChatMessage[]) => 
+                                prev.map(msg => 
+                                    msg.message_id === placeholderMessageId
+                                ? { 
+                                    ...msg, 
+                                    image_url: partialImageUrl,
+                                    content: `Generating... ${elapsed}s`
+                                  }
+                                        : msg
+                                )
+                            );
+                        },
+                // onImageComplete - final image
+                (imageUrl: string) => {
+                    // Stop the timer
+                    if (placeholderMessageId) {
+                        const timer = generatingTimersRef.current.get(placeholderMessageId);
+                        if (timer) {
+                            clearInterval(timer);
+                            generatingTimersRef.current.delete(placeholderMessageId);
+                        }
+                        
+                            const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                        const timeMessage = isModification ? `Edited in ${elapsedTime}s` : `Generated in ${elapsedTime}s`;
+                            
+                        // Update with final image
+                            setMessages((prev: ChatMessage[]) => 
+                                prev.map(msg => 
+                                    msg.message_id === placeholderMessageId
+                                        ? { ...msg, image_url: imageUrl, content: timeMessage, type: "image_solo" as const }
+                                        : msg
+                                )
+                            );
+                        
+                        // Auto-scroll to latest message when image generation completes
+                        setTimeout(() => {
+                            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        }, 100);
+                    }
+                },
+                // onTextComplete - final text (no placeholder needed)
+                (fullText: string) => {
+                    if (!placeholderMessageId) {
+                        // Create text message if it doesn't exist
+                        const textMessage: ChatMessage = {
+                            role: "assistant",
+                            content: fullText,
+                            message_id: generateMessageId()
+                        };
+                        setMessages((prev: ChatMessage[]) => [...prev, textMessage]);
+                    } else {
+                        // Update existing text message
+                        setMessages((prev: ChatMessage[]) => 
+                            prev.map(msg => 
+                                msg.message_id === placeholderMessageId
+                                    ? { ...msg, content: fullText }
+                                    : msg
+                            )
+                        );
+                    }
+                    // Auto-scroll when text completes
+                    setTimeout(() => {
+                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }, 100);
+                },
+                // onError
+                (error: string) => {
+                    if (placeholderMessageId) {
+                        // Stop timer
+                        const timer = generatingTimersRef.current.get(placeholderMessageId);
+                        if (timer) {
+                            clearInterval(timer);
+                            generatingTimersRef.current.delete(placeholderMessageId);
+                        }
+                        
+                        // Update placeholder with error
+                            setMessages((prev: ChatMessage[]) => 
+                                prev.map(msg => 
+                                    msg.message_id === placeholderMessageId
+                                        ? { ...msg, content: `Error: ${error}` }
+                                        : msg
+                                )
+                            );
+                    } else {
+                        // Create error message
+                        const errorMessage: ChatMessage = {
+                            role: "assistant",
+                            content: `Error: ${error}`,
+                            message_id: generateMessageId()
+                        };
+                        setMessages((prev: ChatMessage[]) => [...prev, errorMessage]);
+                    }
+                },
                 undefined,
                 conversationHistory,
                 undefined,
                 undefined
             );
-            console.log("Response received:", response.type);
-
-            // Update pendingImage based on actual response type IMMEDIATELY
-            // This ensures the loading message matches what we're actually doing
-            // Note: This update happens after response, but helps for future requests
-            if (response.type === "text_solo") {
-                // Text response - ensure we're not showing image placeholder
-                setPendingImage(false);
-            } else if (response.type === "image_solo" || response.type === "both") {
-                // Image response - this was correct, but we already got the response
-                // Set to false since we're done loading
-                setPendingImage(false);
-            }
-
-            let content = response.content || "";
-            let imageUrl = response.image_url;
-
-            if (imageUrl && !imageUrl.startsWith('data:') && !imageUrl.startsWith('http')) {
-                console.log("Fixing base64 image format");
-                imageUrl = `data:image/png;base64,${imageUrl}`;
-            }
-
-            const assistantMessage: ChatMessage = {
-                role: "assistant",
-                content,
-                image_url: imageUrl,
-                message_id: generateMessageId()
-            };
-
-            setMessages((prev: ChatMessage[]) => [...prev, assistantMessage]);
-        } catch (error: any) {
-            if (error.name === 'AbortError') {
-                console.log("Request aborted by user");
-            } else {
-            console.error("Error sending message:", error);
-            const errorMessage: ChatMessage = {
-                role: "assistant",
-                content: "Sorry, I encountered an error. Please try again.",
-                message_id: generateMessageId()
-            };
-            setMessages((prev: ChatMessage[]) => [...prev, errorMessage]);
-            }
         } finally {
             setIsLoading(false);
-            setPendingImage(false);
             setAbortController(null);
         }
     };
@@ -318,7 +589,6 @@ export default function Tool1ChatPage() {
         if (abortController) {
             abortController.abort();
             setIsLoading(false);
-            setPendingImage(false);
             setAbortController(null);
         }
     };
@@ -361,6 +631,13 @@ export default function Tool1ChatPage() {
                                                     </div>
                                                 </div>
                                             )}
+                                            
+                                            {/* Wait time notice */}
+                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                                <p className="text-xs text-blue-900 leading-relaxed">
+                                                    <strong>Note:</strong> Image generation may take around 40-80 seconds. Please be patient while the AI creates your visualization.
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -397,7 +674,8 @@ export default function Tool1ChatPage() {
                                 </div>
                             ) : (
                                 <div className="space-y-6 py-4">
-                                    {messages.map((msg, index) => (
+                                    {messages.map((msg, index) => {
+                                        return (
                                         <div key={index} className={`flex gap-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                                             {msg.role === "assistant" && (
                                                 <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
@@ -405,30 +683,97 @@ export default function Tool1ChatPage() {
                                                 </div>
                                             )}
                                             <div className={`flex-1 ${msg.role === "user" ? "max-w-[85%] flex justify-end" : "max-w-[85%]"}`}>
-                                                <div className={`${msg.role === "user" ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"} rounded-2xl px-4 py-3`}>
-                                                    {/* Only show text content if it exists */}
+                                                <div className={`${msg.role === "user" ? "bg-gray-900 text-white" : msg.image_url ? "" : "bg-gray-50 text-gray-900"} ${msg.role === "assistant" && msg.image_url ? "" : "rounded-2xl"} ${msg.role === "assistant" && msg.image_url ? "inline-block px-0 py-0" : msg.role === "assistant" && !msg.image_url && msg.content && msg.content.includes("Generating") ? "px-4 py-3" : "px-4 py-3"}`}>
+                                                    {/* Show thumbnail preview for user messages when modifying image */}
+                                                    {msg.role === "user" && msg.image_url && (
+                                                        <div className="mb-3 flex items-center gap-2 pb-2 border-b border-gray-700">
+                                                            <div className="flex items-center gap-1.5 text-xs text-gray-300">
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                </svg>
+                                                                <span>Selection</span>
+                                                            </div>
+                                                            <div className="flex-1 h-px bg-gray-700"></div>
+                                                            <img 
+                                                                src={msg.image_url} 
+                                                                alt="Image being modified" 
+                                                                className="w-12 h-12 object-cover rounded border border-gray-700"
+                                                                onError={() => console.error("Thumbnail failed to load")}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Show image for assistant messages (partial or final) */}
+                                                    {msg.role === "assistant" && msg.image_url && (
+                                                        <div className="space-y-2">
+                                                            {/* Show status text ABOVE image (always) */}
                                                     {msg.content && msg.content.trim() && (
+                                                                <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                                                                    {msg.content.includes("Generating") && (
+                                                                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent"></div>
+                                                                    )}
+                                                                    <span>{msg.content}</span>
+                                                                    {msg.content.includes("Generating") && (() => {
+                                                                        // Check if this is a modification by looking at previous messages
+                                                                        // Modification happens when the previous message (user) has an image
+                                                                        const msgIndex = messages.findIndex(m => m.message_id === msg.message_id);
+                                                                        const prevMessage = msgIndex > 0 ? messages[msgIndex - 1] : null;
+                                                                        const isModification = prevMessage?.role === "user" && prevMessage?.image_url;
+                                                                        return (
+                                                                            <span className="text-gray-400">• {isModification ? "Modification may take 70-80 seconds. Please be patient." : "Generation may take 40-50 seconds. Please be patient."}</span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            )}
+                                                            <div className={`rounded-lg overflow-hidden relative group`}>
+                                                                <img 
+                                                                    src={msg.image_url} 
+                                                                    alt="Mathematical visualization" 
+                                                                    className="max-w-full h-auto cursor-pointer transition-opacity hover:opacity-90"
+                                                                    style={{ maxWidth: 'min(100%, 512px)' }}
+                                                                    onClick={() => {
+                                                                        // Only allow editing on final images, not previews
+                                                                        if (!msg.content.includes("Generating")) {
+                                                                            handleImageClick(msg.image_url!, msg.message_id);
+                                                                        }
+                                                                    }}
+                                                                    onError={() => console.error("Image failed to load")}
+                                                                />
+                                                                {!msg.content.includes("Generating") && (
+                                                                    <div className="absolute top-1 right-1 bg-black bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                                        Click to edit
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    
+                                                    {/* Show generating status BEFORE image appears (with spinner and patient message) */}
+                                                    {msg.role === "assistant" && !msg.image_url && msg.content && msg.content.includes("Generating") && (
+                                                        <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                                                            <div className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent"></div>
+                                                            <span>{msg.content}</span>
+                                                            {(() => {
+                                                                // Check if this is a modification by looking at previous messages
+                                                                const msgIndex = messages.findIndex(m => m.message_id === msg.message_id);
+                                                                const prevMessage = msgIndex > 0 ? messages[msgIndex - 1] : null;
+                                                                const isModification = prevMessage?.role === "user" && prevMessage?.image_url;
+                                                                return (
+                                                                    <span className="text-gray-400">• {isModification ? "Modification may take 70-80 seconds. Please be patient." : "Generation may take 40-50 seconds. Please be patient."}</span>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Only show text content if it exists and no image and not generating */}
+                                                    {msg.content && msg.content.trim() && !msg.image_url && !msg.content.includes("Generating") && (
                                                         <div className="whitespace-pre-wrap text-sm leading-relaxed">
                                                             {msg.role === "assistant" ? (
                                                                 <MarkdownText content={msg.content} />
                                                             ) : (
                                                                 msg.content
                                                             )}
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {msg.image_url && (
-                                                        <div className={`rounded-lg overflow-hidden relative group ${msg.content && msg.content.trim() ? 'mt-3' : ''}`}>
-                                                            <img 
-                                                                src={msg.image_url} 
-                                                                alt="Mathematical visualization" 
-                                                                className="w-full h-auto cursor-pointer transition-opacity hover:opacity-90"
-                                                                onClick={() => handleImageClick(msg.image_url!, msg.message_id)}
-                                                                onError={() => console.error("Image failed to load")}
-                                                            />
-                                                            <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                                                Click to edit
-                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -439,33 +784,10 @@ export default function Tool1ChatPage() {
                                                 </div>
                                             )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     
-                                    {/* Loading state - show when AI is processing */}
-                                    {isLoading && (
-                                        <div className="flex gap-4 justify-start">
-                                            <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
-                                                <span className="text-xs text-gray-600">AI</span>
-                                            </div>
-                                            <div className="bg-gray-50 rounded-2xl px-4 py-3 max-w-[85%]">
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center space-x-2">
-                                                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-400 border-t-transparent"></div>
-                                                        <span className="text-sm text-gray-500">
-                                                            {/* Only show "Creating image" if we have image in history (modification) */}
-                                                            {(pendingImage && messages.some(msg => msg.image_url))
-                                                                ? "Creating image, may take a while..." 
-                                                                : "Thinking for an answer..."}
-                                                        </span>
-                                                    </div>
-                                                    {/* Only show image placeholder when actually creating image (modification) */}
-                                                    {(pendingImage && messages.some(msg => msg.image_url)) && (
-                                                        <div className="w-full h-48 bg-gradient-to-r from-gray-100 to-gray-200 rounded-md animate-pulse"></div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* Loading message removed - streaming text provides sufficient feedback */}
                                 </div>
                             )}
                             <div ref={messagesEndRef} />

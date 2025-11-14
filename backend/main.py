@@ -2,10 +2,19 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware # Cross-Origin Resource Sharing
 import os
+import logging
 from dotenv import load_dotenv
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+# Configure logging to show all INFO level logs to stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Output to stdout (visible in docker logs)
+    ]
+)
 
 load_dotenv()
 
@@ -61,10 +70,14 @@ if os.path.exists(static_favicon_path):
 
 # Serve index.html for SPA routing (only if it exists)
 # During local dev, frontend runs separately, so this won't be used
+# IMPORTANT: This catch-all must be registered AFTER all API routes
+# FastAPI matches more specific routes first, so /images/{id} will work
 if os.path.exists(static_index_path):
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        if full_path.startswith(("api", "docs", "redoc")):
+        # Exclude API routes and docs - but NOT /images/ since that's a valid API route
+        # FastAPI will match /images/{id} before this catch-all due to route specificity
+        if full_path.startswith(("api", "docs", "redoc", "chat", "image", "research")):
             raise HTTPException(status_code=404)
         return FileResponse(static_index_path)
 

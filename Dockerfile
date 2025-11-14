@@ -46,6 +46,10 @@ RUN cd /app/frontend && npm install --verbose
 # Copy frontend code to /app/frontend (matching handbook structure)
 COPY frontend /app/frontend
 
+# Build the React app with empty API base URL (relative URLs for production)
+# Vite needs VITE_ prefixed env vars at build time
+ENV VITE_API_BASE_URL=""
+
 # Build the React app (default: relative API URLs in production)
 RUN cd /app/frontend && npm run build
 
@@ -73,4 +77,5 @@ EXPOSE 8000
 WORKDIR /app/backend
 
 # Run uvicorn when the container launches
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --log-level info ensures all INFO logs (including our detailed timing logs) are shown
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

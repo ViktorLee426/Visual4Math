@@ -162,6 +162,28 @@ docker compose -f docker-compose.yml up -d
 - Verify volumes are mounted correctly: `docker inspect visual4math | grep Mounts`
 - Check directory permissions: `ls -la /var/lib/peachlab/data/visual4math/`
 
+### 504 Gateway Timeout errors
+Image editing operations can take 40-60 seconds. If you see 504 errors, you need to increase the nginx-proxy timeout:
+
+1. **Create custom nginx config** on the server:
+   ```bash
+   sudo nano /opt/containers/nginx-proxy/conf.d/visual4math.peachhub-cntr1.inf.ethz.ch
+   ```
+
+2. **Add timeout configuration**:
+   ```nginx
+   proxy_read_timeout 300s;
+   proxy_send_timeout 300s;
+   proxy_connect_timeout 300s;
+   ```
+
+3. **Restart nginx-proxy**:
+   ```bash
+   docker restart nginx-proxy
+   ```
+
+This increases the timeout from 60 seconds (default) to 300 seconds (5 minutes), which should be enough for image generation/editing operations.
+
 ## Updating the Application
 
 1. **Make code changes locally**

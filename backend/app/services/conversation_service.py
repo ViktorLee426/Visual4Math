@@ -5,6 +5,7 @@ from app.services.chat_service import get_text_response
 from app.services.image_service import get_image_response
 from app.services.image_modification_service import edit_image_region
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +89,13 @@ def process_conversation(request: ChatRequest, intent: str = None) -> ChatRespon
         logger.info(f"📝 Edit instruction: {request.user_input}")
         try:
             logger.info("🔗 Calling OpenAI images.edit API...")
+            start_time = time.perf_counter()
             edited_image_url = edit_image_region(request)
+            duration = time.perf_counter() - start_time
+            logger.info(f"⏱️ Image edit completed in {duration:.1f}s")
             result = ChatResponse(
                 type="image_solo",
-                content="I've updated the image based on your request.",
+                content=f"Edited in {duration:.1f}s",
                 image_url=edited_image_url
             )
             logger.info(f"✅ Image editing complete: {len(edited_image_url)} chars image URL")
@@ -169,10 +173,13 @@ def process_conversation(request: ChatRequest, intent: str = None) -> ChatRespon
             logger.info(f"📝 User request: {request.user_input}")
             if has_image_in_history:
                 logger.info(f"🔄 Generating modified image based on conversation context...")
+            start_time = time.perf_counter()
             image_url = get_image_response(request)
+            duration = time.perf_counter() - start_time
+            logger.info(f"⏱️ Image generation completed in {duration:.1f}s")
             result = ChatResponse(
                 type="image_solo",
-                content="",  # No subtitle text - just show the image
+                content=f"Generated in {duration:.1f}s",
                 image_url=image_url
             )
             logger.info(f"✅ DEBUG: Image-only response complete: {len(image_url)} chars image URL")
@@ -192,10 +199,13 @@ def process_conversation(request: ChatRequest, intent: str = None) -> ChatRespon
             # Get text response first
             text_content = get_text_response(request)
             # Then get image response (may reuse conversation context)
+            start_time = time.perf_counter()
             image_url = get_image_response(request)
+            duration = time.perf_counter() - start_time
+            logger.info(f"⏱️ Image generation (both) completed in {duration:.1f}s")
             result = ChatResponse(
                 type="both",
-                content=text_content,
+                content=f"{text_content}\n\n_Image generated in {duration:.1f}s._",
                 image_url=image_url
             )
             logger.info(f"✅ DEBUG: Both text and image response complete")

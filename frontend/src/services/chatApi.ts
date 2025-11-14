@@ -70,26 +70,278 @@ export const sendChatMessage = async (
   
   console.log("📤 Sending payload to backend...");
   const url = API_BASE_URL ? `${API_BASE_URL}/chat/` : "/chat/";
-  const response = await axios.post<ChatResponse>(url, payload);
+  // Set timeout to 5 minutes (300000ms) for image editing operations
+  const response = await axios.post<ChatResponse>(url, payload, {
+    timeout: 300000  // 5 minutes - enough for image editing (can take 60-90s)
+  });
   console.log("📥 Received response from backend:", response.data.type);
   console.log("📝 Response content length:", response.data.content.length);
   
   if (response.data.image_url) {
-    const isBase64 = response.data.image_url.startsWith('data:image') || 
-      (!response.data.image_url.startsWith('http') && response.data.image_url.length > 100);
-      
-    console.log("🖼️ Response includes image", 
-      isBase64 ? "as base64 data" : "URL", 
-      ":", response.data.image_url.substring(0, 50) + "...");
-    
-    // Ensure base64 data is properly formatted
-    if (isBase64 && !response.data.image_url.startsWith('data:image')) {
-      console.log("⚠️ Fixing base64 data format");
-      response.data.image_url = `data:image/png;base64,${response.data.image_url}`;
-    }
+    // Backend now returns URLs (like /api/images/{id}), not base64
+    // URLs are stored as-is in conversation history - no conversion needed
+    console.log("🖼️ Response includes image as URL:", response.data.image_url.substring(0, 50) + "...");
   }
   
   return response.data;
+};
+
+// Unified streaming function that handles both text and image (uses backend intent analysis)
+export const sendChatMessageStreamUnified = async (
+  userInput: string,
+  onTextChunk: (chunk: string) => void,
+  onStatus: (message: string) => void,
+  onPartialImage: (imageB64: string, index: number) => void,
+  onImageComplete: (imageUrl: string) => void,
+  onTextComplete: (fullText: string) => void,
+  onError: (error: string) => void,
+  userImage?: string,
+  conversationHistory: ChatMessage[] = [],
+  imageRegion?: ImageRegion,
+  referencedImageId?: string
+): Promise<void> => {
+  console.log("🌊 ChatAPI Stream: Starting unified streaming request");
+  console.log("📝 User input:", userInput);
+  console.log("📜 Conversation history:", conversationHistory.length, "messages");
+  
+  const payload: ChatRequest = {
+    user_input: userInput,
+    user_image: userImage,
+    conversation_history: conversationHistory,
+    image_region: imageRegion,
+    referenced_image_id: referencedImageId
+  };
+
+  console.log("📤 Sending streaming request to backend...");
+  const url = API_BASE_URL ? `${API_BASE_URL}/chat/stream` : "/chat/stream";
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  console.log("📥 Stream response status:", response.status);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    onError(`HTTP ${response.status}: ${errorText}`);
+    return;
+  }
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+
+  if (reader) {
+    console.log("🔄 Starting to read stream...");
+    let buffer = '';
+    let fullText = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        console.log("✅ Stream reading complete");
+        // Process any remaining buffer
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'text') {
+                  fullText += data.content;
+                  onTextChunk(data.content);
+                } else if (data.type === 'status') {
+                  onStatus(data.message);
+                } else if (data.type === 'partial_image') {
+                  console.log(`📸 Received partial image ${data.index}`);
+                  onPartialImage(data.image_b64, data.index);
+                } else if (data.type === 'image_solo' && data.image_url) {
+                  console.log("✅ Received final image URL");
+                  onImageComplete(data.image_url);
+                } else if (data.type === 'error') {
+                  onError(data.message);
+                } else if (data.type === 'done') {
+                  if (fullText) {
+                    onTextComplete(fullText);
+                  }
+                  console.log("🏁 Stream marked as done");
+                  return;
+                }
+              } catch (error) {
+                console.error("❌ Error parsing stream data:", error);
+              }
+            }
+          }
+        } else if (fullText) {
+          onTextComplete(fullText);
+        }
+        break;
+      }
+
+      const chunk = decoder.decode(value, { stream: true });
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.trim() && line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            if (data.type === 'text') {
+              fullText += data.content;
+              onTextChunk(data.content);
+            } else if (data.type === 'status') {
+              onStatus(data.message);
+            } else if (data.type === 'partial_image') {
+              console.log(`📸 Received partial image ${data.index}`);
+              onPartialImage(data.image_b64, data.index);
+            } else if (data.type === 'image_solo' && data.image_url) {
+              console.log("✅ Received final image URL");
+              onImageComplete(data.image_url);
+            } else if (data.type === 'error') {
+              onError(data.message);
+            } else if (data.type === 'done') {
+              if (fullText) {
+                onTextComplete(fullText);
+              }
+              console.log("🏁 Stream marked as done");
+              return;
+            }
+          } catch (error) {
+            console.error("❌ Error parsing stream data:", error);
+            console.log("⚠️ Problematic line (first 200 chars):", line.slice(0, 200));
+          }
+        }
+      }
+    }
+  } else {
+    onError("No reader available for stream");
+  }
+};
+
+// Streaming function for image generation (with partial images) - kept for backward compatibility
+export const sendChatMessageStreamImage = async (
+  userInput: string,
+  onStatus: (message: string) => void,
+  onPartialImage: (imageB64: string, index: number) => void,
+  onComplete: (imageUrl: string) => void,
+  onError: (error: string) => void,
+  userImage?: string,
+  conversationHistory: ChatMessage[] = [],
+  imageRegion?: ImageRegion,
+  referencedImageId?: string
+): Promise<void> => {
+  console.log("🌊 ChatAPI Image Stream: Starting streaming image request");
+  console.log("📝 User input:", userInput);
+  console.log("📜 Conversation history:", conversationHistory.length, "messages");
+  
+  const payload: ChatRequest = {
+    user_input: userInput,
+    user_image: userImage,
+    conversation_history: conversationHistory,
+    image_region: imageRegion,
+    referenced_image_id: referencedImageId
+  };
+
+  console.log("📤 Sending streaming image request to backend...");
+  const url = API_BASE_URL ? `${API_BASE_URL}/chat/stream` : "/chat/stream";
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  console.log("📥 Stream response status:", response.status);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    onError(`HTTP ${response.status}: ${errorText}`);
+    return;
+  }
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+
+  if (reader) {
+    console.log("🔄 Starting to read image stream...");
+    let buffer = ''; // Buffer for incomplete lines
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        console.log("✅ Stream reading complete");
+        // Process any remaining buffer
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'status') {
+                  onStatus(data.message);
+                } else if (data.type === 'partial_image') {
+                  console.log(`📸 Received partial image ${data.index}`);
+                  onPartialImage(data.image_b64, data.index);
+                } else if (data.type === 'image_solo' && data.image_url) {
+                  console.log("✅ Received final image URL");
+                  onComplete(data.image_url);
+                } else if (data.type === 'error') {
+                  onError(data.message);
+                } else if (data.type === 'done') {
+                  console.log("🏁 Stream marked as done");
+                  return;
+                }
+              } catch (error) {
+                console.error("❌ Error parsing stream data:", error);
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      const chunk = decoder.decode(value, { stream: true });
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      
+      // Keep the last incomplete line in buffer (if it doesn't end with \n)
+      buffer = lines.pop() || '';
+      
+      for (const line of lines) {
+        if (line.trim() && line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            if (data.type === 'status') {
+              onStatus(data.message);
+            } else if (data.type === 'partial_image') {
+              console.log(`📸 Received partial image ${data.index}`);
+              onPartialImage(data.image_b64, data.index);
+            } else if (data.type === 'image_solo' && data.image_url) {
+              console.log("✅ Received final image URL");
+              onComplete(data.image_url);
+            } else if (data.type === 'error') {
+              onError(data.message);
+            } else if (data.type === 'done') {
+              console.log("🏁 Stream marked as done");
+              return;
+            }
+          } catch (error) {
+            console.error("❌ Error parsing stream data:", error);
+            console.log("⚠️ Problematic line (first 200 chars):", line.slice(0, 200));
+          }
+        }
+      }
+    }
+  } else {
+    onError("No reader available for stream");
+  }
 };
 
 // Streaming function for text responses

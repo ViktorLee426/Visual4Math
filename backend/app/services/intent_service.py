@@ -58,6 +58,9 @@ Rules:
 - If user asks for explanation only → text_solo
 - If user asks for both explanation AND visual → both
 - Generic vague requests like "help me create images" WITHOUT a specific problem → text_solo
+- If user asks questions about an existing image (e.g., "do you think this is right?", "is this correct?", "what do you think?", "can you explain this?", "analyze this") → text_solo
+- If user wants to discuss, analyze, or get feedback on an existing image → text_solo
+- Questions asking for opinions, evaluations, or explanations about images → text_solo
 
 Respond with exactly one of these three options:
 
@@ -77,12 +80,20 @@ Good decisions examples:
 - "Make this image bigger" (there is an image in context) → image_solo 
 - "I think there are too many basketballs, can you fix it?" (image in context) → image_solo
 - "What does this formula mean?" → text_solo
+- "Do you think this picture is right?" (image in context) → text_solo
+- "Is this correct?" (image in context) → text_solo
+- "What do you think about this image?" (image in context) → text_solo
+- "Can you explain what's shown in this picture?" (image in context) → text_solo
+- "Does this look good?" (image in context) → text_solo
 
 Edge cases that MUST be text_solo:
 - "help me to create some images for math word problem" (vague, no specific problem)
 - "how can I make images for word problems?" (asking how, not requesting image)
+- Any question asking for opinion, analysis, or explanation about an existing image
 
 IMPORTANT: If the user provides a specific math word problem with numbers and objects (like basketballs, bags, etc.), return image_solo even if they don't use explicit verbs like "draw" or "create".
+
+IMPORTANT: If there's an image in the conversation context and the user asks a question about it (opinion, analysis, explanation, evaluation), return text_solo - they want to discuss the image, not generate a new one.
 
 Respond with exactly one word: text_solo, image_solo, or both
 
