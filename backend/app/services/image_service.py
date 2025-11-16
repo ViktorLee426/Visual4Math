@@ -36,36 +36,26 @@ def get_image_response(request: ChatRequest) -> str:
         # Use the math problem if found, otherwise use current request
         target_problem = math_problem if math_problem else request.user_input
         
-        prompt = f"""Create a clear, educational mathematical visualization for this word problem:
-
-Problem: {target_problem}
-
-User's request: {request.user_input}
-
-Create a detailed, mathematically precise visual illustration. The image should:
-- Clearly show all numbers, objects, and relationships mentioned in the problem
-- Be suitable for primary/elementary level mathematics education
-- Use clear visual representations to accurately represent the mathematical scenario described in the math problem, with adecuate visual elements and optionally correct text hints.
-- Show quantities through visual counting (e.g., show 10 basketballs visually if it is the case)
-
-Generate the visualization now:"""
+        # The prompt already contains detailed layout specification from frontend
+        # Just use it directly - it includes explicit count requirements and spatial relationships
+        prompt = request.user_input
         
         logger.info(f"🖼️ DEBUG: Image prompt prepared: {len(prompt)} characters")
         logger.info(f"🎨 DEBUG: Generating mathematical visualization...")        
         logger.info(f"🤖 DEBUG: Using model 'gpt-image-1' for image generation...")
         logger.info("=" * 80)
         logger.info("🚀 CALLING OPENAI IMAGES.GENERATE API NOW (with streaming)")
-        logger.info(f"📝 Prompt preview: {prompt[:200]}...")
+        logger.info(f"📝 Prompt preview: {prompt[:300]}...")
         logger.info("=" * 80)
         
-        # Use streaming API with partial images for better UX
+        # Use images.generate API with text-based layout prompt
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
             n=1,
             size="1024x1024",
             stream=True,
-            partial_images=2  # Get 2 partial images before final
+            partial_images=2
         )
 
         # Process streaming response - collect final image
@@ -128,31 +118,20 @@ def get_image_response_stream(request: ChatRequest):
     context = "\n".join(context_parts)
     target_problem = math_problem if math_problem else request.user_input
     
-    prompt = f"""Create a clear, educational mathematical visualization for this word problem:
-
-Problem: {target_problem}
-
-User's request: {request.user_input}
-
-Create a detailed, mathematically precise visual illustration. The image should:
-- Clearly show all numbers, objects, and relationships mentioned in the problem
-- Be suitable for primary/elementary level mathematics education
-- Use clear visual representations to accurately represent the mathematical scenario described in the math problem, with adecuate visual elements and optionally correct text hints.
-- Show quantities through visual counting (e.g., show 10 basketballs visually if it is the case)
-
-Generate the visualization now:"""
+    # The prompt already contains detailed layout specification from frontend
+    prompt = request.user_input
     
     logger.info(f"🌊 Streaming image generation with prompt ({len(prompt)} chars)...")
     
     try:
-        # Use streaming API
+        # Use images.generate API with text-based layout prompt
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
             n=1,
             size="1024x1024",
             stream=True,
-            partial_images=2  # Get 2 partial images before final
+            partial_images=2
         )
         
         partial_count = 0

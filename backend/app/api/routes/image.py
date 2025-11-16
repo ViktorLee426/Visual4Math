@@ -14,10 +14,10 @@ class ImagePrompt(BaseModel):
 @router.post("/generate-image")
 async def generate_image_from_prompt(data: ImagePrompt):
     try:
-        # Create a simple ChatRequest for image generation
+        # Create a simple ChatRequest for image generation (text-based layout)
         request = ChatRequest(
             user_input=data.prompt,
-            user_image=None,
+            user_image=None,  # No reference image - using text-based layout
             conversation_history=[]
         )
         image_url = get_image_response(request)
