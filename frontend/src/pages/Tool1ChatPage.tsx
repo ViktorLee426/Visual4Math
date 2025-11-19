@@ -5,8 +5,31 @@ import { exampleItems } from '../data/examples';
 import { sendChatMessage, sendChatMessageStreamImage, sendChatMessageStreamUnified } from "../services/chatApi";
 import type { ChatMessage, ImageRegion } from "../services/chatApi";
 import MarkdownText from "../components/MarkdownText";
-import HorizontalProgress from '../components/HorizontalProgress';
+import TimeProportionalProgress from '../components/TimeProportionalProgress';
 import ImageEditorModal from '../components/ImageEditorModal';
+
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL = rawBaseUrl !== undefined
+  ? rawBaseUrl.trim().replace(/\/$/, "")
+  : "http://localhost:8000";
+
+// Helper function to ensure image URLs work locally
+const getImageUrl = (url: string): string => {
+  // If it's already a full URL (http/https), use as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // If it's a relative URL (starts with /), prepend API base URL
+  if (url.startsWith('/')) {
+    return `${API_BASE_URL}${url}`;
+  }
+  // If it's a data URL (base64), use as-is
+  if (url.startsWith('data:image')) {
+    return url;
+  }
+  // Otherwise, assume it's relative and prepend API base URL
+  return `${API_BASE_URL}/${url}`;
+};
 
 export default function Tool1ChatPage() {
     const navigate = useNavigate();
@@ -43,7 +66,7 @@ export default function Tool1ChatPage() {
         const basketballProblem = exampleItems.find(item => item.id === "1");
         if (!basketballProblem || !basketballProblem.imageUrl) {
             console.error("Basketball problem not found");
-            navigate('/instructions');
+            navigate('/tool1-intro');
             return;
         }
 
@@ -53,14 +76,14 @@ export default function Tool1ChatPage() {
         });
 
         // Load existing task data if available
-        const existingData = sessionManager.getPhaseData(`tool-1`);
+        const existingData = sessionManager.getPhaseData('tool1-task');
         if (existingData && existingData.conversation_log) {
             setMessages(existingData.conversation_log);
         } else {
             setMessages([]);
         }
 
-        sessionManager.updatePhase(`tool-1`);
+        sessionManager.updatePhase('tool1-task');
     }, [navigate]);
 
     // Auto-scroll is handled manually when image generation completes
@@ -91,7 +114,7 @@ export default function Tool1ChatPage() {
             };
             
             try {
-                sessionManager.savePhaseData(`tool-1`, taskData);
+                sessionManager.savePhaseData('tool1-task', taskData);
             } catch (error) {
                 console.error("Error saving task data:", error);
             }
@@ -600,7 +623,7 @@ export default function Tool1ChatPage() {
 
     return (
         <div className="min-h-screen bg-white">
-                    <HorizontalProgress currentPage={3} />
+                    <TimeProportionalProgress currentPhase="tool1-task" />
 
             {/* Main content with proper padding for progress bar */}
             <div className="pt-20 pb-8">
@@ -621,11 +644,11 @@ export default function Tool1ChatPage() {
 
                                             {problemData.imageUrl && (
                                                 <div>
-                                                    <h3 className="text-sm font-medium text-gray-500 mb-2">Target Image</h3>
+                                                    <h3 className="text-sm font-medium text-gray-500 mb-2">Example Image</h3>
                                                     <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                                                         <img 
                                                             src={problemData.imageUrl} 
-                                                            alt="Target visualization" 
+                                                            alt="Example visualization" 
                                                             className="w-full h-auto rounded"
                                                         />
                                                     </div>
@@ -644,16 +667,16 @@ export default function Tool1ChatPage() {
                                     {/* Navigation buttons in sidebar */}
                                     <div className="pt-4 border-t border-gray-200 space-y-3">
                                         <button
-                                            onClick={() => navigate('/instructions')}
+                                            onClick={() => navigate('/tool1-intro')}
                                             className="w-full bg-gray-200 text-gray-900 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
                                         >
-                                            ← Back to Instructions
+                                            ← Back to Tool 1 Intro
                                         </button>
                                         <button
-                                            onClick={() => navigate('/tool2')}
+                                            onClick={() => navigate('/tool1-eval')}
                                             className="w-full bg-gray-900 text-white py-2.5 px-4 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
                                         >
-                                            Continue to Tool 2 →
+                                            Continue to Evaluation →
                                         </button>
                                         <p className="text-xs text-gray-400 text-center mt-2">
                                             Continue when satisfied
@@ -695,7 +718,7 @@ export default function Tool1ChatPage() {
                                                             </div>
                                                             <div className="flex-1 h-px bg-gray-700"></div>
                                                             <img 
-                                                                src={msg.image_url} 
+                                                                src={getImageUrl(msg.image_url!)} 
                                                                 alt="Image being modified" 
                                                                 className="w-12 h-12 object-cover rounded border border-gray-700"
                                                                 onError={() => console.error("Thumbnail failed to load")}
@@ -727,7 +750,7 @@ export default function Tool1ChatPage() {
                                                             )}
                                                             <div className={`rounded-lg overflow-hidden relative group`}>
                                                                 <img 
-                                                                    src={msg.image_url} 
+                                                                    src={getImageUrl(msg.image_url!)} 
                                                                     alt="Mathematical visualization" 
                                                                     className="max-w-full h-auto cursor-pointer transition-opacity hover:opacity-90"
                                                                     style={{ maxWidth: 'min(100%, 512px)' }}
@@ -737,7 +760,11 @@ export default function Tool1ChatPage() {
                                                                             handleImageClick(msg.image_url!, msg.message_id);
                                                                         }
                                                                     }}
-                                                                    onError={() => console.error("Image failed to load")}
+                                                                    onError={(e) => {
+                                                                        console.error("Image failed to load:", msg.image_url);
+                                                                        console.error("Converted URL:", getImageUrl(msg.image_url!));
+                                                                        console.error("Error event:", e);
+                                                                    }}
                                                                 />
                                                                 {!msg.content.includes("Generating") && (
                                                                     <div className="absolute top-1 right-1 bg-black bg-opacity-70 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">

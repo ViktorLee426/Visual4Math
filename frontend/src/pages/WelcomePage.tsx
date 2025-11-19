@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import eth_peach from "../assets/eth_peach.png"
 import { sessionManager } from '../utils/sessionManager';
-import HorizontalProgress from '../components/HorizontalProgress';
+import TimeProportionalProgress from '../components/TimeProportionalProgress';
 
 export default function WelcomePage() {
     const [participantId, setParticipantId] = useState('');
@@ -10,11 +10,15 @@ export default function WelcomePage() {
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    // Clear any existing session on component mount for fresh starts
+    // In dev mode, allow any participant ID
+    // Check if there's an existing session on mount
     useEffect(() => {
-        // Clear previous session to start fresh
-        sessionManager.clearSession();
-    }, [navigate]);
+        const existingSession = sessionManager.getParticipantData();
+        if (existingSession && existingSession.participantId) {
+            // Pre-fill the participant ID if session exists
+            setParticipantId(existingSession.participantId);
+        }
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,28 +34,36 @@ export default function WelcomePage() {
         try {
             console.log('Proceeding with participant:', participantId);
             
-            // Skip backend registration - just proceed directly
-            // Initialize session manager
-            sessionManager.initializeParticipant(participantId);
+            // In dev mode: allow any participant ID
+            // Initialize or update session manager
+            const existingSession = sessionManager.getParticipantData();
+            if (!existingSession || existingSession.participantId !== participantId) {
+                sessionManager.initializeParticipant(participantId);
+            }
+            
+            // Ensure session is saved
+            sessionManager.saveSession();
             
             // Store participant ID in localStorage for backup
             localStorage.setItem('participant_id', participantId);
             
-            // Navigate directly to instructions
-            sessionManager.updatePhase('instructions');
-            navigate('/instructions');
+            // Small delay to ensure session is saved before navigation
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Navigate to tool 1 introduction
+            sessionManager.updatePhase('tool1-intro');
+            navigate('/tool1-intro');
             
         } catch (error) {
             console.error('❌ Error with participant setup:', error);
             setError('Failed to proceed. Please try again.');
-        } finally {
             setIsLoading(false);
         }
     };
 
     return (
         <div className="min-h-screen bg-white">
-            <HorizontalProgress currentPage={1} />
+            <TimeProportionalProgress currentPhase="welcome" />
             
             {/* Main content - GPT-style centered */}
             <div className="min-h-screen flex items-center justify-center px-8 pt-24 pb-8">
@@ -75,38 +87,102 @@ export default function WelcomePage() {
                     
                     {/* Study information card */}
                     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h2 className="text-lg font-medium text-gray-900 mb-3">Study Information</h2>
-                        <ul className="space-y-2 text-sm text-gray-700">
-                            <li className="flex items-start">
-                                <span className="text-gray-400 mr-2 mt-0.5">•</span>
-                                <span>Duration: Approximately 60 minutes</span>
-                            </li>
-                            <li className="flex items-start">
-                                <span className="text-gray-400 mr-2 mt-0.5">•</span>
-                                <span>Tasks: Create mathematical visuals using AI</span>
-                            </li>
-                            <li className="flex items-start">
-                                <span className="text-gray-400 mr-2 mt-0.5">•</span>
-                                <span>Method: Think-aloud protocol with screen recording</span>
-                            </li>
-                            <li className="flex items-start">
-                                <span className="text-gray-400 mr-2 mt-0.5">•</span>
-                                <span>Data: All interactions will be recorded for research purposes</span>
-                            </li>
-                        </ul>
+                        <h2 className="text-lg font-medium text-gray-900 mb-4">Study Information</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 mb-2">Duration: Approximately 1 hour</p>
+                                <p className="text-xs text-gray-600">The study will go through the following parts:</p>
+                            </div>
+                            
+                            <div className="space-y-3 text-sm text-gray-700">
+                                <div className="flex items-start">
+                                    <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">3 min</span>
+                                    <span>Welcome page and instructions</span>
+                                </div>
+                                
+                                <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                        <span>Introduction for Tool 1</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">12 min</span>
+                                        <span>Task with Tool 1</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                        <span>Evaluation of Tool 1</span>
+                                    </div>
+                                </div>
+                                
+                                <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                        <span>Introduction for Tool 2</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">12 min</span>
+                                        <span>Task with Tool 2</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                        <span>Evaluation of Tool 2</span>
+                                    </div>
+                                </div>
+                                
+                                <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                        <span>Introduction for Tool 3</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">12 min</span>
+                                        <span>Task with Tool 3</span>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                        <span>Evaluation of Tool 3</span>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex items-start">
+                                    <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
+                                    <span>Final comparison and evaluation adjustment</span>
+                                </div>
+                                
+                                <div className="flex items-start">
+                                    <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">10 min</span>
+                                    <span>Final post-study survey interview</span>
+                                </div>
+                            </div>
+                            
+                            <div className="pt-3 border-t border-gray-200 mt-3">
+                                <p className="text-xs text-gray-600">
+                                    <strong className="font-medium">Note:</strong> Your screen activity and audio will be recorded during the study for research purposes. 
+                                    Please ensure your microphone is working properly.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                     
                     {/* Participant ID form */}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Participant ID
+                            </label>
                             <input
                                 type="text"
-                                placeholder="Enter your participant ID"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm bg-white"
+                                placeholder="Paste your 16-character participant ID here"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm bg-white font-mono"
                                 value={participantId}
                                 onChange={(e) => setParticipantId(e.target.value)}
                                 disabled={isLoading}
+                                maxLength={16}
                             />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Please enter the participant ID you received via email after completing the consent form and demographic questionnaires.
+                            </p>
                             {error && (
                                 <p className="text-red-600 text-xs mt-2">{error}</p>
                             )}

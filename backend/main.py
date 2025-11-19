@@ -50,6 +50,17 @@ app.add_middleware(
 app.include_router(api_router)
 # connects all API routes like /chat, /image
 
+# Root endpoint - simple health check
+@app.get("/")
+async def root():
+    """Root endpoint - returns API info"""
+    return {
+        "message": "Visual4Math Backend API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "status": "running"
+    }
+
 # Serve static assets for the built frontend (only if directory exists)
 # This allows local development where frontend runs separately
 static_assets_path = "static/assets"

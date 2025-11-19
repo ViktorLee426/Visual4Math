@@ -2,6 +2,29 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../services/chatApi';
 
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const API_BASE_URL = rawBaseUrl !== undefined
+  ? rawBaseUrl.trim().replace(/\/$/, "")
+  : "http://localhost:8000";
+
+// Helper function to ensure image URLs work locally
+const getImageUrl = (url: string): string => {
+  // If it's already a full URL (http/https), use as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // If it's a relative URL (starts with /), prepend API base URL
+  if (url.startsWith('/')) {
+    return `${API_BASE_URL}${url}`;
+  }
+  // If it's a data URL (base64), use as-is
+  if (url.startsWith('data:image')) {
+    return url;
+  }
+  // Otherwise, assume it's relative and prepend API base URL
+  return `${API_BASE_URL}/${url}`;
+};
+
 interface ImageEditorModalProps {
   imageUrl: string;
   imageId?: string;
@@ -427,7 +450,7 @@ export default function ImageEditorModal({
           <div className="relative inline-block">
             <img
               ref={imageRef}
-              src={selectedHistoryImage}
+              src={getImageUrl(selectedHistoryImage)}
               alt="Image to edit"
               className="block"
               style={{ 
@@ -436,6 +459,11 @@ export default function ImageEditorModal({
                 width: 'auto',
                 height: 'auto',
                 display: 'block'
+              }}
+              onError={(e) => {
+                console.error("ImageEditorModal: Image failed to load:", selectedHistoryImage);
+                console.error("Converted URL:", getImageUrl(selectedHistoryImage));
+                console.error("Error event:", e);
               }}
             />
             {isPainting && (
@@ -521,9 +549,13 @@ export default function ImageEditorModal({
                   }`}
                 >
                   <img
-                    src={img.url}
+                    src={getImageUrl(img.url)}
                     alt={`History ${index + 1}`}
                     className="w-full h-auto rounded"
+                    onError={() => {
+                      console.error("ImageEditorModal: History image failed to load:", img.url);
+                      console.error("Converted URL:", getImageUrl(img.url));
+                    }}
                   />
                 </button>
               ))}

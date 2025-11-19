@@ -25,7 +25,7 @@ export const exampleItems: ExampleItem[] = [
   {
     id: "3",
     problemText:
-      "Diego has 9 cubes, Jada has 5 cubes. How many more cubes does Diego have compared to Jada?",
+      "Diego has 9 cubes, Jada has 3 cubes. How many more cubes does Diego have compared to Jada?",
     // Put 3.png under frontend/src/data/images/
     imageUrl: new URL('./images/3.png', import.meta.url).toString(),
   },

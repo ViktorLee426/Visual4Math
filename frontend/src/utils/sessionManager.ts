@@ -26,6 +26,7 @@ export interface ParticipantData {
   };
   finalSurvey: any;
   completedPhases: string[];
+  session_data?: Record<string, any>;
 }
 
 export class SessionManager {
@@ -57,9 +58,11 @@ export class SessionManager {
       closedTasks: { task1: null, task2: null },
       openTasks: { task1: null, task2: null },
       finalSurvey: null,
-      completedPhases: []
+      completedPhases: [],
+      session_data: {}
     };
     this.saveSession();
+    console.log('Participant initialized:', participantId, 'Session saved');
   }
 
   // Save current session to sessionStorage (clears when browser is closed)
@@ -87,8 +90,12 @@ export class SessionManager {
     try {
       const savedSession = sessionStorage.getItem('visual4math_session');
       if (savedSession) {
-        this.participantData = JSON.parse(savedSession);
-        console.log('Session loaded from session storage:', this.participantData?.currentPhase);
+        const parsed = JSON.parse(savedSession);
+        this.participantData = parsed;
+        console.log('Session loaded from session storage:', {
+          participantId: this.participantData?.participantId,
+          currentPhase: this.participantData?.currentPhase
+        });
         return this.participantData;
       }
     } catch (error) {
@@ -163,8 +170,40 @@ export class SessionManager {
                 this.participantData.demographics = cleanData;
                 break;
             case 'tool-1':
+            case 'tool1-task':
             case 'closed-task-1':
                 this.participantData.closedTasks.task1 = cleanData;
+                break;
+            case 'tool1-eval':
+                // Store tool1 evaluation separately
+                if (!this.participantData.session_data) {
+                    this.participantData.session_data = {};
+                }
+                this.participantData.session_data['tool1-eval'] = cleanData;
+                break;
+            case 'tool2-task':
+                if (!this.participantData.session_data) {
+                    this.participantData.session_data = {};
+                }
+                this.participantData.session_data['tool2-task'] = cleanData;
+                break;
+            case 'tool2-eval':
+                if (!this.participantData.session_data) {
+                    this.participantData.session_data = {};
+                }
+                this.participantData.session_data['tool2-eval'] = cleanData;
+                break;
+            case 'tool3-task':
+                if (!this.participantData.session_data) {
+                    this.participantData.session_data = {};
+                }
+                this.participantData.session_data['tool3-task'] = cleanData;
+                break;
+            case 'tool3-eval':
+                if (!this.participantData.session_data) {
+                    this.participantData.session_data = {};
+                }
+                this.participantData.session_data['tool3-eval'] = cleanData;
                 break;
             case 'closed-task-2':
                 this.participantData.closedTasks.task2 = cleanData;
@@ -194,8 +233,15 @@ export class SessionManager {
             case 'demographics':
                 return this.participantData.demographics;
             case 'tool-1':
+            case 'tool1-task':
             case 'closed-task-1':
                 return this.participantData.closedTasks.task1;
+            case 'tool1-eval':
+            case 'tool2-task':
+            case 'tool2-eval':
+            case 'tool3-task':
+            case 'tool3-eval':
+                return this.participantData.session_data?.[phase] || null;
             case 'closed-task-2':
                 return this.participantData.closedTasks.task2;
             case 'open-task-1':

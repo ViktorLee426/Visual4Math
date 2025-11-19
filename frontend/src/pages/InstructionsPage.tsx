@@ -39,8 +39,8 @@ export default function InstructionsPage() {
                                 <h2 className="text-lg font-medium text-gray-900">What is tool1 - conversational interface?</h2>
                                 <p className="text-sm text-gray-700 leading-relaxed">
                                     tool1 - conversational interface is a chat-based AI assistant that helps you create mathematical visualizations. 
-                                    You will be given a specific math word problem along with a target image that shows the desired visual representation. 
-                                    Your goal is to use the AI assistant to create an image that is as close as possible to the provided target image.
+                                    You will be given a specific math word problem along with an example image that illustrates one possible visual representation. 
+                                    This example image is provided as a reference for inspiration - feel free to be creative and create your own style of visualization!
                                 </p>
                             </div>
                             

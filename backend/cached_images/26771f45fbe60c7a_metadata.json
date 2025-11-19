@@ -1,0 +1,60 @@
+{
+  "timestamp": "2025-11-18T16:38:00.878132",
+  "prompt": "There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?\n\n=== LAYOUT SPECIFICATION (MUST FOLLOW EXACTLY) ===\n\nCRITICAL COUNT REQUIREMENTS (READ CAREFULLY - THESE ARE MANDATORY):\n- Show EXACTLY 1 art station (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 art station, no more, no less\n- Count verification: When counting art station in the image, the total must equal 1\n- Show EXACTLY 8 glue sticks (not 7, not 9, precisely 8 items)\n- CRITICAL: The image MUST contain exactly 8 glue sticks, no more, no less\n- Count verification: When counting glue sticks in the image, the total must equal 8\n- Show EXACTLY 3 scissorss (not 2, not 4, precisely 3 items)\n- CRITICAL: The image MUST contain exactly 3 scissorss, no more, no less\n- Count verification: When counting scissorss in the image, the total must equal 3\n\nVERIFICATION INSTRUCTIONS:\n- Before finalizing the image, COUNT each object type visually\n- Verify that the count matches EXACTLY what is specified above\n- If counts don't match, regenerate the image with correct counts\n- DO NOT approximate or estimate - use the EXACT numbers specified\n- Each object must be clearly visible and countable in the final image\n\nOBJECTS IN SCENE:\n1. There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?: There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks? positioned at approximately 6% from left, 5% from top, wide shape\n2. art station: EXACTLY 1 art station, object color: #bbdefb positioned at approximately 13% from left, 25% from top, wide shape\n3. glue stick: EXACTLY 8 glue sticks, object color: #e3f2fd positioned at approximately 16% from left, 30% from top, wide shape\n4. scissors: EXACTLY 3 scissorss, object color: #f3e5f5 positioned at approximately 50% from left, 30% from top, wide shape\n\nSPATIAL RELATIONSHIPS:\n- glue stick (8 glue sticks) is contained inside art station\n- scissors (3 scissorss) is contained inside art station\n\n=== END LAYOUT SPECIFICATION ===\n\nFINAL INSTRUCTIONS:\nGenerate the visualization following this layout EXACTLY.\nPay special attention to object counts - they must be precise.\nCount each object type in your generated image and verify it matches the specification.\nIf you generate an image with incorrect counts, you have failed the task.\nThe accuracy of object counts is the most important aspect of this visualization.\n\nIMPORTANT COLOR INSTRUCTIONS:\n- Colors specified above (e.g., \"object color: #bbdefb\") refer ONLY to the objects themselves, NOT the background\n- Use a neutral, clean background (white, light gray, or transparent) - do NOT use object colors for the background\n- The background should be plain and unobtrusive to keep focus on the objects\n",
+  "layout_info": {
+    "nodes": [
+      {
+        "id": "n_1763480127897_0_z6c4",
+        "type": "text",
+        "label": "There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?",
+        "x": 50,
+        "y": 30,
+        "w": 700,
+        "h": 60,
+        "color": "#ffffff"
+      },
+      {
+        "id": "n_1763480127897_1_aom6",
+        "type": "box",
+        "label": "art station",
+        "count": 1,
+        "x": 100,
+        "y": 150,
+        "w": 460,
+        "h": 190,
+        "color": "#bbdefb"
+      },
+      {
+        "id": "n_1763480127897_2_z17y",
+        "type": "box",
+        "label": "glue stick",
+        "count": 8,
+        "x": 130,
+        "y": 180,
+        "w": 140,
+        "h": 100,
+        "color": "#e3f2fd"
+      },
+      {
+        "id": "n_1763480127897_3_5l5j",
+        "type": "box",
+        "label": "scissors",
+        "count": 3,
+        "x": 400,
+        "y": 180,
+        "w": 140,
+        "h": 100,
+        "color": "#f3e5f5"
+      }
+    ],
+    "prompt": "There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?",
+    "canvas_size": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "image_id": "26771f45fbe60c7a",
+  "image_url": "/images/26771f45fbe60c7a",
+  "tool": "Tool2LayoutPage",
+  "generation_time": "2025-11-18T15:37:16.184Z"
+}

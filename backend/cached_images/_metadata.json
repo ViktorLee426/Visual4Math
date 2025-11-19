@@ -1,0 +1,49 @@
+{
+  "timestamp": "2025-11-18T12:19:18.135024",
+  "prompt": "There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?\n\n=== LAYOUT SPECIFICATION (MUST FOLLOW EXACTLY) ===\n\nCRITICAL COUNT REQUIREMENTS (READ CAREFULLY - THESE ARE MANDATORY):\n- Show EXACTLY 8 glue stickss (not 7, not 9, precisely 8 items)\n- CRITICAL: The image MUST contain exactly 8 glue stickss, no more, no less\n- Count verification: When counting glue stickss in the image, the total must equal 8\n- Show EXACTLY 3 scissorss (not 2, not 4, precisely 3 items)\n- CRITICAL: The image MUST contain exactly 3 scissorss, no more, no less\n- Count verification: When counting scissorss in the image, the total must equal 3\n\nVERIFICATION INSTRUCTIONS:\n- Before finalizing the image, COUNT each object type visually\n- Verify that the count matches EXACTLY what is specified above\n- If counts don't match, regenerate the image with correct counts\n- DO NOT approximate or estimate - use the EXACT numbers specified\n- Each object must be clearly visible and countable in the final image\n\nOBJECTS IN SCENE:\n1. There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?: There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks? positioned at approximately 3% from left, 13% from top, wide shape\n2. glue sticks: EXACTLY 8 glue stickss, object color: #e3f2fd positioned at approximately 15% from left, 27% from top, wide shape\n3. scissors: EXACTLY 3 scissorss, object color: #f3e5f5 positioned at approximately 51% from left, 27% from top, wide shape\n\n=== END LAYOUT SPECIFICATION ===\n\nFINAL INSTRUCTIONS:\nGenerate the visualization following this layout EXACTLY.\nPay special attention to object counts - they must be precise.\nCount each object type in your generated image and verify it matches the specification.\nIf you generate an image with incorrect counts, you have failed the task.\nThe accuracy of object counts is the most important aspect of this visualization.\n\nIMPORTANT COLOR INSTRUCTIONS:\n- Colors specified above (e.g., \"object color: #bbdefb\") refer ONLY to the objects themselves, NOT the background\n- Use a neutral, clean background (white, light gray, or transparent) - do NOT use object colors for the background\n- The background should be plain and unobtrusive to keep focus on the objects\n",
+  "layout_info": {
+    "nodes": [
+      {
+        "id": "n_1763461502152_0_y9om",
+        "type": "text",
+        "label": "There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?",
+        "x": 20,
+        "y": 80,
+        "w": 700,
+        "h": 60,
+        "color": "#ffffff"
+      },
+      {
+        "id": "n_1763461502152_1_it7f",
+        "type": "box",
+        "label": "glue sticks",
+        "count": 8,
+        "x": 120,
+        "y": 160,
+        "w": 230,
+        "h": 90,
+        "color": "#e3f2fd"
+      },
+      {
+        "id": "n_1763461502152_2_symg",
+        "type": "box",
+        "label": "scissors",
+        "count": 3,
+        "x": 410,
+        "y": 160,
+        "w": 140,
+        "h": 100,
+        "color": "#f3e5f5"
+      }
+    ],
+    "prompt": "There are 8 glue sticks and 3 scissors at the art station. How many fewer scissors are there than glue sticks?",
+    "canvas_size": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "image_id": "",
+  "image_url": "",
+  "tool": "Tool2LayoutPage",
+  "generation_time": "2025-11-18T11:19:08.771Z"
+}

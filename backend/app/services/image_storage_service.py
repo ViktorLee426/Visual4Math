@@ -9,8 +9,10 @@ import hashlib
 import uuid
 import httpx
 import logging
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
+from datetime import datetime
 from io import BytesIO
 from PIL import Image
 
@@ -162,4 +164,31 @@ def get_image_path(image_id: str) -> Optional[str]:
     if os.path.exists(image_path):
         return image_path
     return None
+
+def store_metadata(image_id: str, metadata: Dict[str, Any]) -> None:
+    """
+    Store metadata JSON file for an image.
+    Metadata should include: timestamp, prompt, layout_info, etc.
+    """
+    try:
+        # Create metadata file path
+        metadata_path = os.path.join(CACHE_DIR, f"{image_id}_metadata.json")
+        
+        # Ensure timestamp is present
+        if "timestamp" not in metadata:
+            metadata["timestamp"] = datetime.now().isoformat()
+        
+        # Ensure image_id and URL are in metadata
+        metadata["image_id"] = image_id
+        if "image_url" not in metadata:
+            metadata["image_url"] = f"/images/{image_id}"
+        
+        # Save metadata as JSON
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)
+        
+        logger.info(f"💾 Saved metadata: {image_id}_metadata.json")
+    except Exception as e:
+        logger.error(f"❌ Failed to store metadata for {image_id}: {e}")
+        # Don't raise - metadata storage failure shouldn't break image generation
 

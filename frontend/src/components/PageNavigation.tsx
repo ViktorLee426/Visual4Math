@@ -23,11 +23,17 @@ export default function PageNavigation({
   
   const pages = [
     { id: 1, path: '/', label: 'Welcome' },
-    { id: 2, path: '/instructions', label: 'Instructions' },
-    { id: 3, path: '/tool1', label: 'Tool 1' },
-    { id: 4, path: '/tool2', label: 'Tool 2' },
-    { id: 5, path: '/tool3', label: 'Tool 3' },
-    { id: 6, path: '/feedback', label: 'Feedback' }
+    { id: 2, path: '/tool1-intro', label: 'Tool 1 Intro' },
+    { id: 3, path: '/tool1', label: 'Tool 1 Task' },
+    { id: 4, path: '/tool1-eval', label: 'Tool 1 Eval' },
+    { id: 5, path: '/tool2-intro', label: 'Tool 2 Intro' },
+    { id: 6, path: '/tool2', label: 'Tool 2 Task' },
+    { id: 7, path: '/tool2-eval', label: 'Tool 2 Eval' },
+    { id: 8, path: '/tool3-intro', label: 'Tool 3 Intro' },
+    { id: 9, path: '/tool3', label: 'Tool 3 Task' },
+    { id: 10, path: '/tool3-eval', label: 'Tool 3 Eval' },
+    { id: 11, path: '/final-comparison', label: 'Final Comparison' },
+    { id: 12, path: '/final-survey', label: 'Final Survey' }
   ];
   
   const prevPage = pages.find(p => p.id === currentPage - 1);
@@ -53,25 +59,36 @@ export default function PageNavigation({
   
   return (
     <div className="flex justify-between items-center pt-4 border-t border-gray-200 mt-6">
-      {showBack && prevPage && (
+      {showBack && prevPage ? (
         <button
           onClick={handleBack}
           className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
         >
           ← {backLabel || `Back to ${prevPage.label}`}
         </button>
+      ) : showBack ? (
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
+        >
+          ← Back to Welcome
+        </button>
+      ) : (
+        <div></div>
       )}
-      {!showBack && <div></div>}
       
-      {showNext && nextPage && (
+      {showNext && nextPage ? (
         <button
           onClick={handleNext}
           className="px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium transition-colors ml-auto"
         >
           {nextLabel || `Continue to ${nextPage.label}`} →
         </button>
+      ) : showNext ? (
+        <div></div>
+      ) : (
+        <div></div>
       )}
-      {!showNext && <div></div>}
     </div>
   );
 }
