@@ -50,10 +50,17 @@ app.add_middleware(
 app.include_router(api_router)
 # connects all API routes like /chat, /image
 
-# Root endpoint - simple health check
+# Define static file paths (needed before root route)
+static_assets_path = "static/assets"
+static_index_path = "static/index.html"
+static_favicon_path = "static/favicon.png"
+
+# Root endpoint - serve frontend if available, otherwise API info
 @app.get("/")
 async def root():
-    """Root endpoint - returns API info"""
+    """Root endpoint - serves frontend index.html if available, otherwise API info"""
+    if os.path.exists(static_index_path):
+        return FileResponse(static_index_path)
     return {
         "message": "Visual4Math Backend API",
         "version": "1.0.0",
@@ -63,9 +70,6 @@ async def root():
 
 # Serve static assets for the built frontend (only if directory exists)
 # This allows local development where frontend runs separately
-static_assets_path = "static/assets"
-static_index_path = "static/index.html"
-static_favicon_path = "static/favicon.png"
 
 if os.path.exists(static_assets_path):
     app.mount("/assets", StaticFiles(directory=static_assets_path), name="assets")
