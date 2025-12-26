@@ -1,17 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sessionManager } from '../utils/sessionManager';
-import { exampleItems } from '../data/examples';
+import { toolAProblems } from '../data/mathProblems';
 import { sendChatMessage, sendChatMessageStreamImage, sendChatMessageStreamUnified } from "../services/chatApi";
 import type { ChatMessage, ImageRegion } from "../services/chatApi";
 import MarkdownText from "../components/MarkdownText";
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
 import ImageEditorModal from '../components/ImageEditorModal';
 
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL = rawBaseUrl !== undefined
-  ? rawBaseUrl.trim().replace(/\/$/, "")
-  : "http://localhost:8000";
+import { API_BASE_URL } from '../utils/apiConfig';
 
 // Helper function to ensure image URLs work locally
 const getImageUrl = (url: string): string => {
@@ -33,7 +30,8 @@ const getImageUrl = (url: string): string => {
 
 export default function Tool1ChatPage() {
     const navigate = useNavigate();
-    const [problemData, setProblemData] = useState<{ problemText: string; imageUrl: string } | null>(null);
+    const [problemData, setProblemData] = useState<{ problemText: string; imageUrl: string; problemId: string } | null>(null);
+    const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
     
     // Chat interface state
     const [input, setInput] = useState("");
@@ -48,43 +46,131 @@ export default function Tool1ChatPage() {
     const [editingImageId, setEditingImageId] = useState<string | null>(null);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     
+    // History panel state
+    const [viewingImageIndex, setViewingImageIndex] = useState<number | null>(null);
+    const [finalOutputSelected, setFinalOutputSelected] = useState<Record<string, string>>({}); // Map: operation -> imageUrl
+    
     // Generate unique message ID
     const generateMessageId = () => {
         return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     };
     
 
-    // Initialize task - use basketball problem (id "1") from examples
+    // Helper function to save conversation history
+    const saveConversationHistory = useRef(() => {
+        // This will be updated by useEffect below
+        console.log('⚠️ Initial ref called - should not happen');
+    });
+
+    // Update the ref whenever dependencies change - save to localStorage
+    useEffect(() => {
+        saveConversationHistory.current = () => {
+            const CONVERSATION_KEY = 'tool1_conversation_history';
+            try {
+                localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages));
+                console.log('💾 Saved conversation on unmount:', messages.length, 'messages');
+            } catch (error) {
+                console.error("Error saving conversation on unmount:", error);
+            }
+        };
+    }, [messages]);
+
+    // Initialize task - load problems for Tool A
+    // Run on mount and when component becomes visible again (e.g., returning from eval page)
     useEffect(() => {
         const session = sessionManager.getParticipantData();
         if (!session) {
-            navigate('/');
-            return;
-        }
-
-        // Get basketball problem (id "1") from examples
-        const basketballProblem = exampleItems.find(item => item.id === "1");
-        if (!basketballProblem || !basketballProblem.imageUrl) {
-            console.error("Basketball problem not found");
-            navigate('/tool1-intro');
-            return;
-        }
-
-        setProblemData({
-            problemText: basketballProblem.problemText,
-            imageUrl: basketballProblem.imageUrl
-        });
-
-        // Load existing task data if available
-        const existingData = sessionManager.getPhaseData('tool1-task');
-        if (existingData && existingData.conversation_log) {
-            setMessages(existingData.conversation_log);
+            console.warn('No session found, but continuing in dev mode');
+            // In dev mode, don't redirect - just continue
         } else {
+            sessionManager.updatePhase('tool1-task');
+        }
+
+        // Load conversation history directly from localStorage (simple and reliable)
+        const CONVERSATION_KEY = 'tool1_conversation_history';
+        try {
+            const savedConversation = localStorage.getItem(CONVERSATION_KEY);
+            if (savedConversation) {
+                const parsed = JSON.parse(savedConversation);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    console.log('✅ Loaded conversation history:', parsed.length, 'messages');
+                    setMessages(parsed);
+                } else {
+                    console.log('⚠️ Empty conversation history, initializing empty');
+                    setMessages([]);
+                }
+            } else {
+                console.log('⚠️ No saved conversation found, initializing empty');
+                setMessages([]);
+            }
+        } catch (error) {
+            console.error('Error loading conversation:', error);
             setMessages([]);
         }
 
-        sessionManager.updatePhase('tool1-task');
-    }, [navigate]);
+        // Load existing task data for other fields (problem selection, final outputs, etc.)
+        const taskData = sessionManager.getPhaseData('tool1-task');
+        if (taskData) {
+            // Load final outputs if selected (per operation)
+            const finalOutputs = taskData.final_outputs || (taskData.final_output ? { 'addition': taskData.final_output } : {});
+            if (finalOutputs && Object.keys(finalOutputs).length > 0) {
+                setFinalOutputSelected(finalOutputs);
+            }
+
+            // Load selected problem if available, otherwise default to Addition
+            const savedProblemId = taskData.selected_problem_id;
+            const defaultProblemId = 'toolA-add'; // Addition by default
+            const problemIdToUse = savedProblemId || defaultProblemId;
+            const problem = toolAProblems.find(p => p.id === problemIdToUse);
+            if (problem) {
+                setSelectedProblemId(problemIdToUse);
+                setProblemData({
+                    problemText: problem.problemText,
+                    imageUrl: problem.imageUrl,
+                    problemId: problem.id
+                });
+                // Save default if not already saved
+                if (!savedProblemId) {
+                    sessionManager.savePhaseData('tool1-task', {
+                        ...taskData,
+                        selected_problem_id: defaultProblemId
+                    });
+                }
+            }
+        } else {
+            // No saved data - initialize with defaults
+            setFinalOutputSelected({});
+            const defaultProblemId = 'toolA-add';
+            const problem = toolAProblems.find(p => p.id === defaultProblemId);
+            if (problem) {
+                setSelectedProblemId(defaultProblemId);
+                setProblemData({
+                    problemText: problem.problemText,
+                    imageUrl: problem.imageUrl,
+                    problemId: problem.id
+                });
+            }
+        }
+    }, []); // Run on mount only - data will be saved automatically via useEffect hooks
+
+    // Handle problem selection
+    const handleSelectProblem = (problemId: string) => {
+        const problem = toolAProblems.find(p => p.id === problemId);
+        if (problem) {
+            setSelectedProblemId(problemId);
+            setProblemData({
+                problemText: problem.problemText,
+                imageUrl: problem.imageUrl,
+                problemId: problem.id
+            });
+            // Save selected problem
+            const taskData = sessionManager.getPhaseData('tool1-task') || {};
+            sessionManager.savePhaseData('tool1-task', {
+                ...taskData,
+                selected_problem_id: problemId
+            });
+        }
+    };
 
     // Auto-scroll is handled manually when image generation completes
     // This allows free scrolling during generation
@@ -97,20 +183,31 @@ export default function Tool1ChatPage() {
         };
     }, []);
 
-    // Save progress automatically
+    // Save conversation history directly to localStorage whenever messages change
     useEffect(() => {
-        if (messages.length > 0 && problemData) {
-            // For task data, include the complete current in-memory messages
-            // We're now using sessionStorage so we can keep the full current state
-            // including images for navigation within the current session
+        const CONVERSATION_KEY = 'tool1_conversation_history';
+        try {
+            localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages));
+            console.log('💾 Saved conversation to localStorage:', messages.length, 'messages');
+        } catch (error) {
+            console.error('Error saving conversation to localStorage:', error);
+        }
+    }, [messages]);
+
+    // Save other task data (problem selection, final outputs) through sessionManager
+    useEffect(() => {
+        if (problemData) {
+            const existingTaskData = sessionManager.getPhaseData('tool1-task') || {};
             const taskData = {
-                participant_id: sessionManager.getParticipantData()?.participantId || '',
+                ...existingTaskData,
+                participant_id: sessionManager.getParticipantData()?.participantId || existingTaskData.participant_id || '',
                 task_type: 'tool1' as const,
                 task_number: 1,
                 problem_text: problemData.problemText,
                 target_image_url: problemData.imageUrl,
-                conversation_log: messages, // Use full messages including images
-                completion_status: 'in_progress'
+                selected_problem_id: problemData.problemId,
+                completion_status: Object.keys(finalOutputSelected).length > 0 ? 'completed' : 'in_progress',
+                final_outputs: finalOutputSelected
             };
             
             try {
@@ -119,7 +216,77 @@ export default function Tool1ChatPage() {
                 console.error("Error saving task data:", error);
             }
         }
-    }, [messages, problemData]);
+    }, [problemData, finalOutputSelected]);
+
+    // Save conversation history on unmount (when navigating away)
+    useEffect(() => {
+        return () => {
+            console.log('🔄 Component unmounting, saving conversation...');
+            saveConversationHistory.current();
+        };
+    }, []); // Empty deps - use ref to get latest values
+
+    // Also save on beforeunload (browser close/navigation)
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            console.log('🔄 Page unloading, saving conversation...');
+            const CONVERSATION_KEY = 'tool1_conversation_history';
+            try {
+                localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages));
+            } catch (error) {
+                console.error('Error saving on beforeunload:', error);
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [messages]);
+    
+    // Handle selecting final output for a specific operation
+    const handleSelectFinalOutput = (imageUrl: string, operation: string) => {
+        const newFinalOutputs = { ...finalOutputSelected, [operation]: imageUrl };
+        setFinalOutputSelected(newFinalOutputs);
+        const taskData = sessionManager.getPhaseData('tool1-task') || {};
+        sessionManager.savePhaseData('tool1-task', {
+            ...taskData,
+            final_outputs: newFinalOutputs,
+            completion_status: Object.keys(newFinalOutputs).length > 0 ? 'completed' : 'in_progress'
+        });
+    };
+    
+    // Get operation name from problem ID
+    const getOperationFromProblemId = (problemId: string): string => {
+        const problem = toolAProblems.find(p => p.id === problemId);
+        return problem?.operation || '';
+    };
+    
+    // Get all generated images from conversation history
+    const generatedImages = messages
+        .filter(msg => msg.role === 'assistant' && msg.image_url && !msg.content.includes('Generating'))
+        .map(msg => ({
+            url: msg.image_url!,
+            messageId: msg.message_id,
+            timestamp: msg.message_id || Date.now().toString()
+        }));
+    
+    // Keyboard support for image viewer (moved after generatedImages is defined)
+    useEffect(() => {
+        if (viewingImageIndex === null) return;
+        
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setViewingImageIndex(null);
+            } else if (e.key === 'ArrowLeft' && viewingImageIndex > 0) {
+                setViewingImageIndex(viewingImageIndex - 1);
+            } else if (e.key === 'ArrowRight' && viewingImageIndex < generatedImages.length - 1) {
+                setViewingImageIndex(viewingImageIndex + 1);
+            }
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [viewingImageIndex, generatedImages.length]);
 
     // Handle image click - open editor modal
     const handleImageClick = (imageUrl: string, messageId?: string) => {
@@ -617,40 +784,83 @@ export default function Tool1ChatPage() {
     };
 
 
-    if (!problemData) {
-        return <div>Loading task...</div>;
-    }
-
     return (
         <div className="min-h-screen bg-white">
                     <TimeProportionalProgress currentPhase="tool1-task" />
 
             {/* Main content with proper padding for progress bar */}
-            <div className="pt-20 pb-8">
-                <div className="max-w-7xl mx-auto px-6">
+            <div className="pt-16 pb-8 overflow-x-auto ml-56">
+                <div className="min-w-[1024px] max-w-7xl mx-auto px-6">
                     {/* Tool Title - Top Left */}
-                    <h1 className="text-2xl font-semibold text-gray-900 mb-6">Tool1 - Conversational interface</h1>
+                    <h1 className="text-2xl font-semibold text-gray-900 mb-6">Tool A - Conversational interface</h1>
                     
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-4 gap-8">
                             {/* Task Information Panel - Sidebar */}
-                    <div className="lg:col-span-1">
+                    <div className="col-span-1">
                         <div className="sticky top-24 space-y-6">
                                     <div>
                                         <div className="space-y-4">
+                                            {/* Problems Selection - Compact Operation Buttons */}
                                             <div>
-                                                <h3 className="text-sm font-medium text-gray-500 mb-2">Problem</h3>
-                                                <p className="text-sm text-gray-900 leading-relaxed">{problemData.problemText}</p>
+                                                <h3 className="text-sm font-medium text-gray-500 mb-3">Select a Problem</h3>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {toolAProblems.map((problem) => {
+                                                        const isSelected = selectedProblemId === problem.id;
+                                                        const operationLabels = {
+                                                            addition: 'Addition',
+                                                            subtraction: 'Subtraction',
+                                                            multiplication: 'Multiplication',
+                                                            division: 'Division'
+                                                        };
+                                                        return (
+                                                            <button
+                                                                key={problem.id}
+                                                                onClick={() => handleSelectProblem(problem.id)}
+                                                                className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                                                                    isSelected 
+                                                                        ? 'border-gray-900 bg-gray-50' 
+                                                                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                                                                }`}
+                                                            >
+                                                                <span className="text-sm font-medium text-gray-900">
+                                                                    {operationLabels[problem.operation]}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
 
-                                            {problemData.imageUrl && (
-                                                <div>
-                                                    <h3 className="text-sm font-medium text-gray-500 mb-2">Example Image</h3>
-                                                    <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                                                        <img 
-                                                            src={problemData.imageUrl} 
-                                                            alt="Example visualization" 
-                                                            className="w-full h-auto rounded"
-                                                        />
+                                            {/* Selected Problem Display */}
+                                            {problemData && (
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <h3 className="text-sm font-medium text-gray-500">Problem</h3>
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(problemData.problemText);
+                                                                }}
+                                                                className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                                                                title="Copy problem text"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                </svg>
+                                                                Copy
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-sm text-gray-900 leading-relaxed">{problemData.problemText}</p>
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-sm font-medium text-gray-500 mb-2">Example Image</h3>
+                                                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                                            <img 
+                                                                src={problemData.imageUrl} 
+                                                                alt="Example visualization" 
+                                                                className="w-full h-auto rounded"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )}
@@ -661,32 +871,24 @@ export default function Tool1ChatPage() {
                                                     <strong>Note:</strong> Image generation may take around 40-80 seconds. Please be patient while the AI creates your visualization.
                                                 </p>
                                             </div>
+                                            
+                                            {/* Back button - left side */}
+                                            <div className="pt-4">
+                                                <button
+                                                    onClick={() => navigate('/tool1-intro')}
+                                                    className="w-full px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors text-left"
+                                                >
+                                                    ← Back to Tool A Intro
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    {/* Navigation buttons in sidebar */}
-                                    <div className="pt-4 border-t border-gray-200 space-y-3">
-                                        <button
-                                            onClick={() => navigate('/tool1-intro')}
-                                            className="w-full bg-gray-200 text-gray-900 py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
-                                        >
-                                            ← Back to Tool 1 Intro
-                                        </button>
-                                        <button
-                                            onClick={() => navigate('/tool1-eval')}
-                                            className="w-full bg-gray-900 text-white py-2.5 px-4 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
-                                        >
-                                            Continue to Evaluation →
-                                        </button>
-                                        <p className="text-xs text-gray-400 text-center mt-2">
-                                            Continue when satisfied
-                                        </p>
                                     </div>
                                 </div>
                             </div>
 
                     {/* Chat Interface - Main Content */}
-                    <div className="lg:col-span-2 flex flex-col" style={{ height: '700px', maxHeight: '700px' }}>
+                    <div className="col-span-2 flex flex-col space-y-4">
+                        <div className="flex flex-col" style={{ height: '650px', maxHeight: '650px' }}>
                         {/* Chat Messages - GPT-like style */}
                         <div className="flex-1 overflow-y-auto mb-4 min-h-0">
                             {messages.length === 0 ? (
@@ -841,7 +1043,7 @@ export default function Tool1ChatPage() {
                                         }
                                     }}
                                     placeholder="Message..."
-                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none text-sm bg-white"
+                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none text-sm bg-white text-gray-900"
                                     rows={1}
                                     style={{ 
                                         minHeight: '44px', 
@@ -874,6 +1076,69 @@ export default function Tool1ChatPage() {
                                 )}
                             </div>
                         </div>
+                        </div>
+                    </div>
+                    
+                    {/* History Panel - Right Sidebar */}
+                    <div className="col-span-1 flex flex-col">
+                        <div className="bg-white rounded-lg border border-gray-200 p-4 sticky top-24 flex-1 flex flex-col">
+                            <h3 className="text-sm font-medium text-gray-700 mb-4">Generated Images</h3>
+                            
+                            <div className="flex-1 overflow-hidden flex flex-col">
+                                {generatedImages.length === 0 ? (
+                                    <div className="text-center text-xs text-gray-400 py-8">
+                                        <p>No images generated yet</p>
+                                        <p className="text-[10px] mt-1">Images will appear here</p>
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 overflow-y-auto min-h-0">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {generatedImages.map((img, idx) => {
+                                                // Check if this image is selected for any operation
+                                                const selectedForOperation = Object.entries(finalOutputSelected).find(
+                                                    ([_, url]) => url === img.url
+                                                )?.[0];
+                                                
+                                                return (
+                                                    <div 
+                                                        key={idx}
+                                                        className={`relative rounded-lg overflow-hidden border-2 transition-colors cursor-pointer ${
+                                                            selectedForOperation
+                                                                ? 'border-green-500'
+                                                                : 'border-gray-200 hover:border-gray-300'
+                                                        }`}
+                                                        onClick={() => {
+                                                            setViewingImageIndex(idx);
+                                                        }}
+                                                    >
+                                                        <img 
+                                                            src={getImageUrl(img.url)} 
+                                                            alt={`Generated ${idx + 1}`} 
+                                                            className="w-full h-auto"
+                                                        />
+                                                        {selectedForOperation && (
+                                                            <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded">
+                                                                ✓ {selectedForOperation.charAt(0).toUpperCase() + selectedForOperation.slice(1)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* Continue button - bottom of right sidebar, aligned with back button */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <button
+                                    onClick={() => navigate('/tool1-eval')}
+                                    className="w-full px-6 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium transition-colors"
+                                >
+                                    Continue to Evaluation →
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     </div>
                     
@@ -893,6 +1158,102 @@ export default function Tool1ChatPage() {
                             }}
                             onSendModification={handleSendModification}
                         />
+                    )}
+                    
+                    {/* Full-size Image Viewer Modal */}
+                    {viewingImageIndex !== null && generatedImages[viewingImageIndex] && (
+                        <div 
+                            className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
+                            onClick={() => setViewingImageIndex(null)}
+                        >
+                            <div className="relative max-w-5xl max-h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden">
+                                {/* Close button */}
+                                <button
+                                    onClick={() => setViewingImageIndex(null)}
+                                    className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 shadow-lg hover:bg-gray-100 transition-colors"
+                                    title="Close (Esc)"
+                                >
+                                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                                
+                                {/* Navigation buttons */}
+                                {generatedImages.length > 1 && (
+                                    <>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setViewingImageIndex(prev => prev !== null ? Math.max(0, prev - 1) : null);
+                                            }}
+                                            disabled={viewingImageIndex === 0}
+                                            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full p-3 shadow-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            title="Previous (←)"
+                                        >
+                                            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setViewingImageIndex(prev => prev !== null ? Math.min(generatedImages.length - 1, prev + 1) : null);
+                                            }}
+                                            disabled={viewingImageIndex === generatedImages.length - 1}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full p-3 shadow-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                            title="Next (→)"
+                                        >
+                                            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                            </svg>
+                                        </button>
+                                    </>
+                                )}
+                                
+                                {/* Image */}
+                                <div className="p-4">
+                                    <img 
+                                        src={getImageUrl(generatedImages[viewingImageIndex].url)} 
+                                        className="max-w-full max-h-[85vh] mx-auto rounded-lg" 
+                                        alt={`Generated image ${viewingImageIndex + 1}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                                
+                                {/* Image info and selection */}
+                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg text-xs space-y-2">
+                                    <div>
+                                        Image {viewingImageIndex + 1} of {generatedImages.length}
+                                    </div>
+                                    {problemData && (
+                                        <div className="space-y-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const operation = getOperationFromProblemId(problemData.problemId);
+                                                    if (operation) {
+                                                        handleSelectFinalOutput(generatedImages[viewingImageIndex].url, operation);
+                                                    }
+                                                }}
+                                                className="w-full px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
+                                            >
+                                                {finalOutputSelected[getOperationFromProblemId(problemData.problemId)] === generatedImages[viewingImageIndex].url
+                                                    ? '✓ Selected for ' + getOperationFromProblemId(problemData.problemId)
+                                                    : 'Mark as final (' + (problemData?.problemId?.includes('add') ? 'Addition' : problemData?.problemId?.includes('sub') ? 'Subtraction' : problemData?.problemId?.includes('mult') ? 'Multiplication' : 'Division') + ')'}
+                                            </button>
+                                            {/* Show all selected operations for this image */}
+                                            {Object.entries(finalOutputSelected)
+                                                .filter(([_, url]) => url === generatedImages[viewingImageIndex].url)
+                                                .map(([op, _]) => (
+                                                    <div key={op} className="text-xs text-green-600 text-center">
+                                                        ✓ Selected: {op.charAt(0).toUpperCase() + op.slice(1)}
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>

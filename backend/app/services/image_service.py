@@ -4,6 +4,7 @@ from app.schemas.chat import ChatRequest
 from app.services.image_storage_service import store_image
 import logging
 import base64
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +64,12 @@ Generate the visualization now:"""
         logger.info(prompt)
         logger.info("=" * 80)
         logger.info(f"📏 Prompt length: {len(prompt)} characters")
-        logger.info(f"🤖 DEBUG: Using model 'gpt-image-1' for image generation...")
+        logger.info(f"🤖 DEBUG: Using model 'gpt-image-1.5' for image generation...")
         logger.info("🚀 CALLING OPENAI IMAGES.GENERATE API NOW (with streaming)")
         
         # Use streaming API with partial images for better UX
         response = client.images.generate(
-            model="gpt-image-1",
+            model="gpt-image-1.5",
             prompt=prompt,
             n=1,
             size="1024x1024",
@@ -203,54 +204,170 @@ Create a detailed, mathematically precise visual illustration. The image should:
 
 Generate the visualization now:"""
     
-    # LOG THE COMPLETE PROMPT FOR DEBUGGING
+    # Check if we have a layout image for image-to-image generation
+    has_layout_image = request.user_image is not None and len(request.user_image) > 0
+    
+    if has_layout_image:
+        # The prompt from frontend already contains structured sections:
+        # - Original problem
+        # - Task description (mentioning two inputs)
+        # - Layout specification
+        # - Generation guidelines
+        # We just need to add a brief reminder about the two inputs
+        enhanced_prompt = f"""{prompt}
+
+=== REMINDER ===
+You are receiving TWO inputs:
+1. LAYOUT IMAGE (provided as the image to edit): A diagram showing boxes and text elements
+2. LAYOUT PROMPT (this text): Contains the original problem, layout specification, and generation guidelines
+
+Follow the layout specification and generation guidelines above to create the educational visualization."""
+    else:
+        enhanced_prompt = prompt
+    
+    # LOG THE COMPLETE PROMPT ONCE (only for debugging)
     logger.info("=" * 80)
-    logger.info("📋 COMPLETE PROMPT BEING SENT TO GPT (STREAMING):")
+    logger.info("📋 COMPLETE PROMPT BEING SENT TO GPT:")
     logger.info("=" * 80)
-    logger.info(prompt)
+    logger.info(enhanced_prompt)
     logger.info("=" * 80)
-    logger.info(f"🌊 Streaming image generation with prompt ({len(prompt)} chars)...")
+    logger.info(f"📏 Prompt length: {len(enhanced_prompt)} characters")
+    logger.info(f"🖼️ Has layout image: {has_layout_image} ({len(request.user_image) if has_layout_image else 0} bytes)")
+    logger.info(f"🌊 Streaming: True")
     
     try:
-        # Use streaming API
-        response = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            n=1,
-            size="1024x1024",
-            stream=True,
-            partial_images=2  # Get 2 partial images before final
-        )
+        if has_layout_image:
+            # Use images.edit() for image-to-image generation
+            # Convert bytes to file-like object
+            image_file = io.BytesIO(request.user_image)
+            image_file.name = "layout.png"
+            
+            logger.info(f"🖼️ Calling images.edit() API...")
+            
+            try:
+                response = client.images.edit(
+                    model="gpt-image-1.5",
+                    image=image_file,
+                    prompt=enhanced_prompt,
+                    n=1,
+                    size="1024x1024",
+                    stream=True,
+                    partial_images=2  # Get 2 partial images before final
+                )
+                logger.info(f"✅ images.edit() call completed, got response object: {type(response)}")
+            except Exception as edit_error:
+                logger.error(f"❌ images.edit() with streaming failed: {edit_error}")
+                logger.info("🔄 Falling back to non-streaming images.edit()...")
+                # Reset file pointer
+                image_file.seek(0)
+                # Try non-streaming API
+                response = client.images.edit(
+                    model="gpt-image-1.5",
+                    image=image_file,
+                    prompt=enhanced_prompt,
+                    n=1,
+                    size="1024x1024"
+                )
+                logger.info(f"✅ Non-streaming images.edit() completed, got response: {type(response)}")
+                # Handle non-streaming response
+                if hasattr(response, 'data') and response.data and len(response.data) > 0:
+                    image_data = response.data[0]
+                    if hasattr(image_data, 'b64_json') and image_data.b64_json:
+                        logger.info("📸 Got image from non-streaming response (b64_json)")
+                        final_b64 = image_data.b64_json
+                        data_url = f"data:image/png;base64,{final_b64}"
+                        backend_url = store_image(data_url)
+                        yield {
+                            'type': 'completed',
+                            'image_url': backend_url
+                        }
+                        return
+                    elif hasattr(image_data, 'url') and image_data.url:
+                        logger.info(f"📸 Got image URL from non-streaming response: {image_data.url}")
+                        yield {
+                            'type': 'completed',
+                            'image_url': image_data.url
+                        }
+                        return
+                logger.error("❌ Non-streaming response has no image data")
+                yield {
+                    'type': 'error',
+                    'message': 'No image data in response'
+                }
+                return
+        else:
+            # Use images.generate() for text-to-image generation
+            logger.info(f"📝 Calling images.generate() API...")
+            logger.info("=" * 80)
+            logger.info("📋 FINAL PROMPT SENT TO images.generate() API:")
+            logger.info("=" * 80)
+            logger.info(enhanced_prompt)
+            logger.info("=" * 80)
+            
+            response = client.images.generate(
+                model="gpt-image-1.5",
+                prompt=enhanced_prompt,
+                n=1,
+                size="1024x1024",
+                stream=True,
+                partial_images=2  # Get 2 partial images before final
+            )
+            
+            logger.info(f"✅ images.generate() call completed, got response object: {type(response)}")
         
         partial_count = 0
+        event_count = 0
+        
         for event in response:
+            event_count += 1
             event_type = getattr(event, 'type', None)
             
-            if event_type == "image_generation.partial_image":
+            # Handle both image_generation.* and image_edit.* event types
+            if event_type in ("image_generation.partial_image", "image_edit.partial_image"):
                 partial_idx = getattr(event, 'partial_image_index', None)
                 partial_b64 = getattr(event, 'b64_json', None)
                 if partial_b64:
                     partial_count += 1
-                    logger.info(f"📸 Yielding partial image {partial_idx}")
+                    logger.info(f"📸 Partial image {partial_idx} received")
                     yield {
                         'type': 'partial_image',
                         'index': partial_idx,
                         'image_b64': partial_b64
                     }
-            elif event_type == "image_generation.completed":
+            elif event_type in ("image_generation.completed", "image_edit.completed"):
                 final_b64 = getattr(event, 'b64_json', None)
                 if final_b64:
-                    logger.info(f"✅ Yielding final image after {partial_count} partial images")
+                    logger.info(f"✅ Final image received (after {partial_count} partial images)")
                     # Store final image
                     data_url = f"data:image/png;base64,{final_b64}"
                     backend_url = store_image(data_url)
+                    logger.info(f"💾 Image saved: {backend_url}")
                     yield {
                         'type': 'completed',
                         'image_url': backend_url
                     }
                     break
+            elif event_type == "error" or event_type == "image_generation.error":
+                error_msg = getattr(event, 'message', None) or getattr(event, 'error', {}).get('message', 'Unknown error')
+                logger.error(f"❌ Error: {error_msg}")
+                yield {
+                    'type': 'error',
+                    'message': error_msg
+                }
+                break
+        
+        # If we exit the loop without yielding completed or error, something went wrong
+        if event_count == 0:
+            logger.error("❌ No events received from streaming response!")
+            yield {
+                'type': 'error',
+                'message': 'No events received from image generation stream'
+            }
+            
     except Exception as e:
         logger.error(f"❌ Streaming image generation failed: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         yield {
             'type': 'error',
             'message': str(e)

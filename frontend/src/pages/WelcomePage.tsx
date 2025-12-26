@@ -1,205 +1,86 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import eth_peach from "../assets/eth_peach.png"
-import { sessionManager } from '../utils/sessionManager';
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
 
 export default function WelcomePage() {
-    const [participantId, setParticipantId] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    // In dev mode, allow any participant ID
-    // Check if there's an existing session on mount
-    useEffect(() => {
-        const existingSession = sessionManager.getParticipantData();
-        if (existingSession && existingSession.participantId) {
-            // Pre-fill the participant ID if session exists
-            setParticipantId(existingSession.participantId);
-        }
-    }, []);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        if (!participantId.trim()) {
-            setError('Please enter a participant ID');
-            return;
-        }
-
-        setIsLoading(true);
-        setError('');
-
-        try {
-            console.log('Proceeding with participant:', participantId);
-            
-            // In dev mode: allow any participant ID
-            // Initialize or update session manager
-            const existingSession = sessionManager.getParticipantData();
-            if (!existingSession || existingSession.participantId !== participantId) {
-                sessionManager.initializeParticipant(participantId);
-            }
-            
-            // Ensure session is saved
-            sessionManager.saveSession();
-            
-            // Store participant ID in localStorage for backup
-            localStorage.setItem('participant_id', participantId);
-            
-            // Small delay to ensure session is saved before navigation
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Navigate to tool 1 introduction
-            sessionManager.updatePhase('tool1-intro');
-            navigate('/tool1-intro');
-            
-        } catch (error) {
-            console.error('❌ Error with participant setup:', error);
-            setError('Failed to proceed. Please try again.');
-            setIsLoading(false);
-        }
+    const handleContinue = () => {
+        navigate('/instructions');
     };
 
     return (
-        <div className="min-h-screen bg-white">
+        <div className="min-h-screen bg-white flex relative">
             <TimeProportionalProgress currentPhase="welcome" />
             
-            {/* Main content - GPT-style centered */}
-            <div className="min-h-screen flex items-center justify-center px-8 pt-24 pb-8">
-                <div className="max-w-3xl w-full space-y-8">
-                    {/* Logo at top */}
-                    <div className="flex justify-center mb-8">
-                        <img 
-                            src={eth_peach} 
-                            alt="ETH Zurich PEACH Lab" 
-                            className="h-10 w-auto" 
-                        />
-                    </div>
-                    
+            {/* Main content with left sidebar for progress */}
+            <div className="flex-1 min-h-screen flex items-start justify-center px-8 py-8 ml-56 pt-16">
+                <div className="max-w-6xl w-full space-y-6">
                     {/* Welcome heading */}
-                    <div className="text-center space-y-4">
+                    <div className="text-center space-y-3">
                         <h1 className="text-3xl font-semibold text-gray-900">Welcome</h1>
                         <p className="text-gray-600 text-base leading-relaxed">
-                            Thank you for participating in this user study. This study is conducted by the <strong>PEACH Lab at ETH Zurich</strong> to explore how educators interact with generative AI tools to create pedagogical visuals.
+                            Thank you for participating in this user study. This study is conducted by the <strong>PEACH Lab at ETH Zurich</strong>. 
+                            The study will take approximately <strong>1 hour</strong> to complete.
                         </p>
                     </div>
                     
-                    {/* Study information card */}
+                    {/* Purpose section */}
                     <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <h2 className="text-lg font-medium text-gray-900 mb-4">Study Information</h2>
-                        <div className="space-y-4">
+                        <h2 className="text-lg font-medium text-gray-900 mb-3 text-center">About This Study</h2>
+                        <div className="space-y-3 text-base text-gray-700">
                             <div>
-                                <p className="text-sm font-medium text-gray-900 mb-2">Duration: Approximately 1 hour</p>
-                                <p className="text-xs text-gray-600">The study will go through the following parts:</p>
+                                <h3 className="font-medium text-gray-900 mb-1.5">Why this study?</h3>
+                                <p className="leading-relaxed">
+                                    Images are important and useful in teaching—they help students understand questions and keep them engaged. 
+                                    With generative AI becoming more popular, it is important to leverage these technologies in educational settings 
+                                    to support teachers in creating effective visual learning materials.
+                                </p>
                             </div>
-                            
-                            <div className="space-y-3 text-sm text-gray-700">
-                                <div className="flex items-start">
-                                    <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">3 min</span>
-                                    <span>Welcome page and instructions</span>
-                                </div>
-                                
-                                <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                        <span>Introduction for Tool 1</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">12 min</span>
-                                        <span>Task with Tool 1</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                        <span>Evaluation of Tool 1</span>
-                                    </div>
-                                </div>
-                                
-                                <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                        <span>Introduction for Tool 2</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">12 min</span>
-                                        <span>Task with Tool 2</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                        <span>Evaluation of Tool 2</span>
-                                    </div>
-                                </div>
-                                
-                                <div className="ml-6 space-y-2 border-l-2 border-gray-200 pl-4">
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                        <span>Introduction for Tool 3</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">12 min</span>
-                                        <span>Task with Tool 3</span>
-                                    </div>
-                                    <div className="flex items-start">
-                                        <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                        <span>Evaluation of Tool 3</span>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex items-start">
-                                    <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">2 min</span>
-                                    <span>Final comparison and evaluation adjustment</span>
-                                </div>
-                                
-                                <div className="flex items-start">
-                                    <span className="text-gray-400 mr-2 mt-0.5 font-mono text-xs">10 min</span>
-                                    <span>Final post-study survey interview</span>
-                                </div>
-                            </div>
-                            
-                            <div className="pt-3 border-t border-gray-200 mt-3">
-                                <p className="text-xs text-gray-600">
-                                    <strong className="font-medium">Note:</strong> Your screen activity and audio will be recorded during the study for research purposes. 
-                                    Please ensure your microphone is working properly.
+                            <div>
+                                <h3 className="font-medium text-gray-900 mb-1.5">What will I do?</h3>
+                                <p className="leading-relaxed">
+                                    In this study, you will try three different AI-powered tools for creating visual representations of math word problems. 
+                                    Each tool offers a different interaction approach, and we're interested in learning about your experience with each one.
                                 </p>
                             </div>
                         </div>
                     </div>
                     
-                    {/* Participant ID form */}
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Participant ID
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Paste your 16-character participant ID here"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm bg-white font-mono"
-                                value={participantId}
-                                onChange={(e) => setParticipantId(e.target.value)}
-                                disabled={isLoading}
-                                maxLength={16}
-                            />
-                            <p className="text-xs text-gray-500 mt-1">
-                                Please enter the participant ID you received via email after completing the consent form and demographic questionnaires.
-                            </p>
-                            {error && (
-                                <p className="text-red-600 text-xs mt-2">{error}</p>
-                            )}
+                    {/* Important information */}
+                    <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <h2 className="text-lg font-medium text-gray-900 mb-3 text-center">Notes</h2>
+                        <div className="space-y-3 text-base text-gray-700">
+                            <div>
+                                <h3 className="font-medium text-gray-900 mb-1.5">Think-aloud protocol</h3>
+                                <p className="leading-relaxed">
+                                    Please verbalize your thoughts as you work—speak aloud what you think in your mind so we can understand your thinking process. 
+                                    Share what you're trying to achieve, how you're planning to use the tool, your reactions, 
+                                    and any frustrations or satisfactions you experience.
+                                </p>
+                            </div>
+                            <div>
+                                <h3 className="font-medium text-gray-900 mb-1.5">Record the Screen</h3>
+                                <p className="leading-relaxed">
+                                    We will ask you to share your screen and record it during the study. Please hide your personal information 
+                                    and only share the web application page where the task is displayed. Make sure that your microphone is working properly.
+                                </p>
+                            </div>
                         </div>
-                        
+                    </div>
+                    
+                    {/* Continue button */}
+                    <div className="space-y-4">
                         <button
-                            type="submit"
-                            className="w-full bg-gray-900 text-white py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
-                            disabled={isLoading}
+                            onClick={handleContinue}
+                            className="w-full bg-gray-900 text-white py-4 px-6 rounded-lg hover:bg-gray-800 transition-colors text-base font-medium"
                         >
-                            {isLoading ? 'Starting...' : 'Begin Study'}
+                            Continue to Instructions →
                         </button>
                         
                         <p className="text-xs text-gray-500 text-center">
                             Your participation is voluntary and you may withdraw at any time.
                         </p>
-                    </form>
+                    </div>
                 </div>
             </div>
         </div>

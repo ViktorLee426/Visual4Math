@@ -1,13 +1,7 @@
 // src/services/chatApi.ts
 import axios from "axios";
-// TS can not use Python models, so we are definening the Basemodel here in the Frontend. 
-
-// Use environment variable if set, otherwise default to local backend
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL =
-  rawBaseUrl !== undefined
-    ? rawBaseUrl.trim().replace(/\/$/, "")
-    : "http://localhost:8000";
+import { API_BASE_URL } from "../utils/apiConfig";
+// TS can not use Python models, so we are definening the Basemodel here in the Frontend.
 
 // Updated interfaces to match our backend schemas
 export interface ChatMessage {

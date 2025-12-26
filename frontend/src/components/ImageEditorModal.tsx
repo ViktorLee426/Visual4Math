@@ -1,11 +1,7 @@
 // src/components/ImageEditorModal.tsx
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../services/chatApi';
-
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL = rawBaseUrl !== undefined
-  ? rawBaseUrl.trim().replace(/\/$/, "")
-  : "http://localhost:8000";
+import { API_BASE_URL } from '../utils/apiConfig';
 
 // Helper function to ensure image URLs work locally
 const getImageUrl = (url: string): string => {

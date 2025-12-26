@@ -16,7 +16,14 @@ logging.basicConfig(
     ]
 )
 
-load_dotenv()
+# Load .env file from backend directory (don't scan parent directories)
+# This prevents slow directory scanning during import
+import pathlib
+env_path = pathlib.Path(__file__).parent / '.env'
+if env_path.exists():
+    load_dotenv(dotenv_path=str(env_path), override=False)
+else:
+    load_dotenv(override=False)  # Only scan current directory
 
 from app.api import router as api_router
 #create FastAPI app instance, this is the core backend server
@@ -34,7 +41,7 @@ app = FastAPI(
 # In production, set ALLOWED_ORIGINS to include the production domain
 allowed_origins_str = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000"
+    "http://localhost:5173"
 )
 allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
 

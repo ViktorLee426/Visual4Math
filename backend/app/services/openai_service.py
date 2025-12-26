@@ -11,9 +11,28 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key)
+# Load .env file efficiently (don't scan parent directories)
+backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+env_path = os.path.join(backend_dir, '.env')
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path, override=False)
+else:
+    load_dotenv(override=False)
+
+# Lazy initialization to prevent hanging during import
+_client_instance = None
+def get_client():
+    global _client_instance
+    if _client_instance is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        _client_instance = OpenAI(api_key=api_key)
+    return _client_instance
+
+# For backward compatibility
+class ClientProxy:
+    def __getattr__(self, name):
+        return getattr(get_client(), name)
+client = ClientProxy()
 
 # Helper Functions
 def build_openai_messages(request: ChatRequest) -> List[dict]:

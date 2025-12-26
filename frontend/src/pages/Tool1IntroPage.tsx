@@ -35,54 +35,49 @@ export default function Tool1IntroPage() {
         <div className="min-h-screen bg-white">
             <TimeProportionalProgress currentPhase="tool1-intro" />
 
-            <div className="min-h-screen flex items-center justify-center px-8 pt-24">
-                <div className="max-w-3xl w-full space-y-6">
-                    <h1 className="text-2xl font-semibold text-gray-900 text-center">
-                        Tool 1: Conversational Interface
+            <div className="min-h-screen flex items-start justify-center px-4 pt-8 ml-56">
+                <div className="w-full max-w-[95%] space-y-4">
+                    <h1 className="text-xl font-semibold text-gray-900 text-center">
+                        Tool A: Conversational Interface
                     </h1>
                     
-                    <div className="bg-white rounded-lg p-8 border border-gray-200">
-                        <div className="space-y-6">
-                            <div className="space-y-2">
-                                <h2 className="text-lg font-medium text-gray-900">What is this tool?</h2>
-                                <p className="text-sm text-gray-700 leading-relaxed">
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <h2 className="text-base font-medium text-gray-900">What is this tool and how to use it?</h2>
+                                <p className="text-sm text-gray-700 leading-snug">
                                     This is a chat-based AI assistant that helps you create mathematical visualizations. 
-                                    You will be given a specific math word problem along with an example image that illustrates one possible visual representation. 
-                                    This example image is provided as a reference for inspiration - feel free to be creative and create your own style of visualization!
+                                    Type your request in the chat interface, and the AI will generate images based on your description. 
+                                    You can refine your request by chatting with the AI, or edit images directly using the brush tool.
                                 </p>
                             </div>
                             
-                            <div className="space-y-2">
-                                <h2 className="text-lg font-medium text-gray-900">How to use it</h2>
-                                <ul className="list-disc list-inside text-sm text-gray-700 ml-4 space-y-1.5">
-                                    <li>Type your request in the chat interface</li>
-                                    <li>The AI will generate images based on your description</li>
-                                    <li>You can refine your request by chatting with the AI</li>
-                                    <li>You can also edit images directly using the brush tool</li>
-                                </ul>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <h2 className="text-lg font-medium text-gray-900">Task duration</h2>
-                                <p className="text-sm text-gray-700 leading-relaxed">
+                            <div className="space-y-1">
+                                <h2 className="text-base font-medium text-gray-900">What will you do and for how long?</h2>
+                                <p className="text-sm text-gray-700 leading-snug">
                                     You have approximately <strong>12 minutes</strong> to work with this tool. 
-                                    Feel free to explore and create visualizations in your own style - the example image is just for reference. 
-                                    When you are satisfied with the generated image, feel free to proceed to the evaluation.
+                                    We will provide you with <strong>4 math word problems (in text) along with 4 corresponding target images</strong>. 
+                                    The problems cover addition, subtraction, multiplication, and division. 
+                                    You can choose to work on any of the problems - you can work on 1, 2, 3, or all 4 problems, whatever you prefer. 
+                                    Try to generate images until the time is up. When you are satisfied with your visualization(s), proceed to the evaluation.
                                 </p>
                             </div>
                             
+                            {/* Demo Video - Below Instructions */}
                             <div className="space-y-2">
-                                <h2 className="text-lg font-medium text-gray-900">Think-Aloud Protocol</h2>
-                                <p className="text-sm text-gray-700 leading-relaxed mb-2">
-                                    Please verbalize your thoughts as you work. Share aloud:
-                                </p>
-                                <ul className="list-disc list-inside text-sm text-gray-700 ml-4 space-y-1.5">
-                                    <li>What you're trying to achieve</li>
-                                    <li>How you're planning to ask the AI</li>
-                                    <li>Your reaction to the AI responses</li>
-                                    <li>Whether you are satisfied or frustrated and why</li>
-                                    <li>What kind of adjustment you want to make</li>
-                                </ul>
+                                <h2 className="text-base font-medium text-gray-900 text-center">Demo Video</h2>
+                                <div className="w-full flex justify-center">
+                                    <video 
+                                        className="rounded-lg shadow-lg" 
+                                        controls
+                                        preload="metadata"
+                                        style={{ width: '100%', maxWidth: '800px', aspectRatio: '16/9' }}
+                                    >
+                                        <source src="/videos/Tool_A_Demo.mov" type="video/quicktime" />
+                                        <source src="/videos/Tool_A_Demo.mov" type="video/mp4" />
+                                        Your browser does not support the video tag.
+                                    </video>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -99,7 +94,7 @@ export default function Tool1IntroPage() {
                             onClick={handleStartTask}
                             className="flex-1 bg-gray-900 text-white py-3 px-4 rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
                         >
-                            Start Tool 1 Task →
+                            Start Tool A Task →
                         </button>
                     </div>
                 </div>

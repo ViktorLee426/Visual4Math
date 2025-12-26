@@ -1,10 +1,5 @@
 import axios from "axios";
-
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL =
-  rawBaseUrl !== undefined
-    ? rawBaseUrl.trim().replace(/\/$/, "")
-    : "http://localhost:8000";
+import { API_BASE_URL } from "../utils/apiConfig";
 
 export interface LayoutItem {
   type: "box" | "text";
@@ -21,12 +16,21 @@ export interface ParseResponse {
   layout: LayoutItem[];
 }
 
-export const parseMathWordProblem = async (problemText: string): Promise<ParseResponse> => {
+export const parseMathWordProblem = async (
+  problemText: string,
+  signal?: AbortSignal
+): Promise<ParseResponse> => {
   const url = API_BASE_URL
     ? `${API_BASE_URL}/parse/parse-mwp`
     : "/parse/parse-mwp";
-  const res = await axios.post<ParseResponse>(url, {
-    problem_text: problemText,
-  });
+  const res = await axios.post<ParseResponse>(
+    url,
+    {
+      problem_text: problemText,
+    },
+    {
+      signal, // Support cancellation
+    }
+  );
   return res.data;
 };

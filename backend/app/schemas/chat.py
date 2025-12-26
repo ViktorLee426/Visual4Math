@@ -1,6 +1,6 @@
 # backend/app/schemas/chat.py
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 
 class ImageRegion(BaseModel):
@@ -20,10 +20,13 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """User's input to the system"""
     user_input: str  # user's text message
-    user_image: Optional[str] = None  # optional image URL from user (deprecated - not using anymore)
+    user_image: Optional[Union[str, bytes]] = None  # optional image URL (str) or image bytes (bytes) for layout image
     conversation_history: List[ChatMessage] = []
     image_region: Optional[ImageRegion] = None  # For image editing with brush selection
     referenced_image_id: Optional[str] = None  # ID of the image user clicked on
+    
+    class Config:
+        arbitrary_types_allowed = True  # Allow bytes type
 
 class ChatResponse(BaseModel):
     """System's response to user"""

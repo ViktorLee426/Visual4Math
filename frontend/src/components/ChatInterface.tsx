@@ -158,7 +158,7 @@ export default function ChatInterface() {
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="w-full p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
               placeholder="Ask about math concepts, request diagrams, or describe what you need help with... (Shift+Enter for new line)"
               rows={2}
               onKeyDown={(e) => {

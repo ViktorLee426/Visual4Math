@@ -1,14 +1,8 @@
 // frontend/src/services/researchApi.ts
 import axios from "axios";
+import { API_BASE_URL } from "../utils/apiConfig";
 
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL =
-  rawBaseUrl !== undefined
-    ? rawBaseUrl.trim().replace(/\/$/, "")
-    : "http://localhost:8000";
-const RESEARCH_BASE_URL = API_BASE_URL
-  ? `${API_BASE_URL}/research`
-  : "/research";
+const RESEARCH_BASE_URL = `${API_BASE_URL}/research`;
 
 // Interfaces
 export interface ParticipantData {

@@ -3,7 +3,7 @@ import TimeProportionalProgress from '../components/TimeProportionalProgress';
 import { useNavigate } from 'react-router-dom';
 import { sessionManager } from '../utils/sessionManager';
 import { useEffect, useRef, useState } from 'react';
-import { exampleItems } from '../data/examples';
+import { toolCProblems } from '../data/mathProblems';
 import PageNavigation from '../components/PageNavigation';
 import { generateManipulatives, getSvgIcons, type SvgIcon } from '../services/manipulativesApi';
 
@@ -39,6 +39,9 @@ export default function Tool3PanelPage() {
   const [iconsLoading, setIconsLoading] = useState(true);
   const [problemText, setProblemText] = useState('');
   const [viewingImageIndex, setViewingImageIndex] = useState<number | null>(null);
+  const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
+  const [currentProblem, setCurrentProblem] = useState<{ problemText: string; imageUrl: string } | null>(null);
+  const [finalOutputSelected, setFinalOutputSelected] = useState<Record<string, string>>({}); // Map: operation -> imageUrl
   // Text properties for new text boxes
   const [textFontSize, setTextFontSize] = useState(14);
   const [textFontFamily, setTextFontFamily] = useState('Arial');
@@ -48,11 +51,94 @@ export default function Tool3PanelPage() {
   useEffect(() => {
     const session = sessionManager.getParticipantData();
     if (!session) {
-      navigate('/');
-      return;
+      console.warn('No session found, but continuing in dev mode');
+      // In dev mode, don't redirect - just continue
+    } else {
+      sessionManager.updatePhase('tool3-task');
     }
-    sessionManager.updatePhase('tool3-task');
+
+    // Load selected problem if available, otherwise default to Multiplication
+    const taskData = sessionManager.getPhaseData('tool3-task');
+    const savedProblemId = taskData?.selected_problem_id;
+    const defaultProblemId = 'toolC-mult'; // Multiplication by default
+    const problemIdToUse = savedProblemId || defaultProblemId;
+    const problem = toolCProblems.find(p => p.id === problemIdToUse);
+    if (problem) {
+      setSelectedProblemId(problemIdToUse);
+      setCurrentProblem({
+        problemText: problem.problemText,
+        imageUrl: problem.imageUrl
+      });
+      // Don't auto-fill text input - user should copy manually
+      // Save default if not already saved
+      if (!savedProblemId) {
+        sessionManager.savePhaseData('tool3-task', {
+          ...taskData,
+          selected_problem_id: defaultProblemId
+        });
+      }
+    }
+    
+    // Load snapshots if available
+    const savedSnapshots = taskData?.snapshots;
+    if (savedSnapshots && Array.isArray(savedSnapshots) && savedSnapshots.length > 0) {
+      setSnapshots(savedSnapshots);
+    }
+    
+    // Load final outputs if selected (per operation)
+    const finalOutputs = taskData?.final_outputs || {};
+    if (finalOutputs && Object.keys(finalOutputs).length > 0) {
+      setFinalOutputSelected(finalOutputs);
+    }
+    
+    // Load saved canvas state (elems and problemText)
+    if (taskData?.elems && Array.isArray(taskData.elems) && taskData.elems.length > 0) {
+      setElems(taskData.elems);
+      // Initialize undo stack with loaded elements
+      setUndoStack([taskData.elems]);
+      setRedoStack([]);
+    }
+    if (taskData?.problemText && typeof taskData.problemText === 'string') {
+      setProblemText(taskData.problemText);
+    }
   }, [navigate]);
+
+  // Handle problem selection
+  const handleSelectProblem = (problemId: string) => {
+    const problem = toolCProblems.find(p => p.id === problemId);
+    if (problem) {
+      setSelectedProblemId(problemId);
+      setCurrentProblem({
+        problemText: problem.problemText,
+        imageUrl: problem.imageUrl
+      });
+      // Don't auto-fill text input - user should copy manually
+      // Save selected problem
+      const taskData = sessionManager.getPhaseData('tool3-task') || {};
+      sessionManager.savePhaseData('tool3-task', {
+        ...taskData,
+        selected_problem_id: problemId
+      });
+    }
+  };
+  
+  // Get operation name from problem ID
+  const getOperationFromProblemId = (problemId: string): string => {
+    const problem = toolCProblems.find(p => p.id === problemId);
+    return problem?.operation || '';
+  };
+  
+  // Handle selecting final output for a specific operation
+  const handleSelectFinalOutput = (imageUrl: string, operation: string) => {
+    const newFinalOutputs = { ...finalOutputSelected, [operation]: imageUrl };
+    setFinalOutputSelected(newFinalOutputs);
+    const taskData = sessionManager.getPhaseData('tool3-task') || {};
+    sessionManager.savePhaseData('tool3-task', {
+      ...taskData,
+      final_outputs: newFinalOutputs,
+      completion_status: Object.keys(newFinalOutputs).length > 0 ? 'completed' : 'in_progress'
+    });
+  };
 
   const pushHistory = (prev: Elem[]) => {
     setUndoStack(s => [...s, prev].slice(-50));
@@ -143,6 +229,35 @@ export default function Tool3PanelPage() {
     };
     loadIcons();
   }, []);
+
+  // Auto-save canvas state (elems and problemText) whenever they change
+  useEffect(() => {
+    const taskData = sessionManager.getPhaseData('tool3-task') || {};
+    sessionManager.savePhaseData('tool3-task', {
+      ...taskData,
+      elems: elems, // Save current canvas elements
+      problemText: problemText, // Save text input
+      snapshots: snapshots, // Keep existing snapshots
+      final_outputs: finalOutputSelected, // Keep existing final outputs
+      selected_problem_id: selectedProblemId // Keep selected problem
+    });
+  }, [elems, problemText, snapshots, finalOutputSelected, selectedProblemId]); // Save whenever state changes
+
+  // Save state on unmount (when navigating away)
+  useEffect(() => {
+    return () => {
+      // Cleanup: save state before component unmounts
+      const taskData = sessionManager.getPhaseData('tool3-task') || {};
+      sessionManager.savePhaseData('tool3-task', {
+        ...taskData,
+        elems: elems,
+        problemText: problemText,
+        snapshots: snapshots,
+        final_outputs: finalOutputSelected,
+        selected_problem_id: selectedProblemId
+      });
+    };
+  }, [elems, problemText, snapshots, finalOutputSelected, selectedProblemId]);
 
   const parseMWP = async (text: string) => {
     if (!text.trim()) {
@@ -419,39 +534,72 @@ export default function Tool3PanelPage() {
   return (
     <div className="min-h-screen bg-white">
       <TimeProportionalProgress currentPhase="tool3-task" />
-      <div className="pt-20 pb-8">
-        <div className="max-w-7xl mx-auto px-6">
+      <div className="pt-16 pb-8 overflow-x-auto ml-56">
+        <div className="min-w-[1024px] max-w-7xl mx-auto px-6">
           {/* Tool Title - Top Left */}
-          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Tool3 - Free manipulation</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Tool C - Free manipulation</h1>
           
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Left: Problem + Example Image + Text Input */}
-          <div className="lg:col-span-1 space-y-5">
-            {/* Problem Panel - Read-only */}
-            {(() => {
-              const example = exampleItems.find(e => e.id==='3') || exampleItems[0];
-              return (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Problem</h3>
-                  <p className="text-sm text-gray-900 leading-relaxed">{example.problemText}</p>
-                </div>
-              );
-            })()}
+          <div className="grid grid-cols-4 gap-6">
+          {/* Left: Problem Selection + Example Image + Text Input */}
+          <div className="col-span-1 space-y-5">
+            {/* Problems Selection - Compact Operation Buttons */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-3">Select a Problem</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {toolCProblems.map((problem) => {
+                  const isSelected = selectedProblemId === problem.id;
+                  const operationLabels = {
+                    addition: 'Addition',
+                    subtraction: 'Subtraction',
+                    multiplication: 'Multiplication',
+                    division: 'Division'
+                  };
+                  return (
+                    <button
+                      key={problem.id}
+                      onClick={() => handleSelectProblem(problem.id)}
+                      className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
+                        isSelected 
+                          ? 'border-gray-900 bg-gray-50' 
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <span className="text-sm font-medium text-gray-900">
+                        {operationLabels[problem.operation]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-            {/* Example Image Panel - No box */}
-            {(() => {
-              const example = exampleItems.find(e => e.id==='3') || exampleItems[0];
-              return (
+            {/* Selected Problem Display */}
+            {currentProblem && (
+              <div className="space-y-3">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-gray-500">Problem</h3>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(currentProblem.problemText);
+                      }}
+                      className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                      title="Copy problem text"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-900 leading-relaxed">{currentProblem.problemText}</p>
+                </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Example Image</h3>
-                  {example.imageUrl ? (
-                    <img src={example.imageUrl} alt="Example" className="w-full h-auto rounded" />
-                  ) : (
-                    <div className="text-center text-gray-400 text-xs py-8 border-2 border-dashed border-gray-200 rounded-lg">Example image</div>
-                  )}
+                  <img src={currentProblem.imageUrl} alt="Example" className="w-full h-auto rounded" />
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
             {/* Text Input Panel */}
             <div>
@@ -459,7 +607,7 @@ export default function Tool3PanelPage() {
               <textarea 
                 id="t3-prompt" 
                 className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none" 
-                placeholder="Paste a math word problem (grade 1–3)…"
+                placeholder="Enter the math word problem here in text..."
                 value={problemText}
                 onChange={(e) => setProblemText(e.target.value)}
                 onPaste={(e) => {
@@ -621,7 +769,7 @@ export default function Tool3PanelPage() {
           </div>
 
           {/* Center: Canvas */}
-          <div className="lg:col-span-2 space-y-3">
+          <div className="col-span-2 space-y-3">
             <div className="flex items-center justify-between text-xs text-gray-600">
               <div>Zoom: {(scale*100).toFixed(0)}%</div>
               <div className="space-x-2 flex items-center gap-2">
@@ -673,7 +821,8 @@ export default function Tool3PanelPage() {
               </div>
             </div>
             <svg ref={svgRef} className="w-full h-[520px] border rounded bg-white"
-              onWheel={(e)=>{e.stopPropagation(); const d=-e.deltaY; setScale(s=>Math.min(3, Math.max(0.3, s + d*0.001)));}}
+              // Zoom is now only controlled by buttons, not trackpad/wheel
+              // Removed onWheel handler to prevent accidental zooming
               onMouseDown={(e)=>{ 
                 const target = e.target as Element;
                 // If clicking on SVG background (not on an element), deselect and start panning
@@ -701,7 +850,7 @@ export default function Tool3PanelPage() {
                 <Draggable key={e.id} onDrag={(dx,dy)=>onDrag(e.id,dx,dy)}>
                   {e.kind==='icon' && e.svg && (
                     <>
-                      <image href={`data:image/svg+xml;utf8,${encodeURIComponent(e.svg)}`} x={e.x} y={e.y} width={e.w} height={e.h} onClick={(e)=>{e.stopPropagation(); setSelectedId(e.currentTarget.getAttribute('data-id') || null);}} data-id={e.id} />
+                      <image href={`data:image/svg+xml;utf8,${encodeURIComponent(e.svg)}`} x={e.x} y={e.y} width={e.w} height={e.h} onMouseDown={(e)=>{e.stopPropagation(); setSelectedId(e.currentTarget.getAttribute('data-id') || null);}} data-id={e.id} />
                       {selectedId === e.id && (
                         <>
                           <CornerHandle x={e.x} y={e.y} onResize={(dx,dy)=>onResize(e.id,dx,dy,'nw')} cursor="nwse-resize" />
@@ -736,7 +885,7 @@ export default function Tool3PanelPage() {
             <PageNavigation 
               currentPage={9} 
               onBack={() => navigate('/tool3-intro')}
-              backLabel="Back to Tool 3 Intro"
+              backLabel="Back to Tool C Intro"
               onNext={() => navigate('/tool3-eval')}
               nextLabel="Continue to Evaluation"
               showBack={true}
@@ -744,7 +893,7 @@ export default function Tool3PanelPage() {
           </div>
 
           {/* Right: Icon search */}
-          <div className="lg:col-span-1 space-y-3">
+          <div className="col-span-1 space-y-3">
             <div className="border rounded p-3">
               <h3 className="text-sm font-medium text-gray-900 mb-1">Search Icons</h3>
               <input id="t3-search" className="w-full border rounded px-2 py-1 text-sm" placeholder="Search (e.g., basketball, cake)" onChange={(e)=>{
@@ -797,22 +946,70 @@ export default function Tool3PanelPage() {
                 className="w-full px-4 py-2 bg-gray-900 text-white rounded text-sm font-medium mb-3 hover:bg-gray-800 transition-colors" 
                 onClick={async()=>{
                   const png = await exportCanvasToPng();
-                  setSnapshots(prev => [{ url: png, ts: Date.now() }, ...prev].slice(0,50));
+                  const newSnapshots = [{ url: png, ts: Date.now() }, ...snapshots].slice(0,50);
+                  setSnapshots(newSnapshots);
+                  
+                  // Save snapshots to session (preserve canvas state)
+                  const taskData = sessionManager.getPhaseData('tool3-task') || {};
+                  sessionManager.savePhaseData('tool3-task', {
+                    ...taskData,
+                    snapshots: newSnapshots,
+                    elems: elems, // Preserve canvas elements
+                    problemText: problemText // Preserve text input
+                  });
                 }}
               >
                 Save Image
               </button>
+              
+              {/* Final output indicators per operation */}
+              {Object.keys(finalOutputSelected).length > 0 && (
+                <div className="mb-3 space-y-2">
+                  {Object.entries(finalOutputSelected).map(([operation, imageUrl]) => (
+                    <div key={operation} className="p-2 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="text-xs font-medium text-green-800 mb-1">
+                        ✓ Selected: {operation.charAt(0).toUpperCase() + operation.slice(1)}
+                      </div>
+                      <img 
+                        src={imageUrl} 
+                        alt={`Final output for ${operation}`} 
+                        className="w-full h-auto rounded border border-green-300"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="max-h-[200px] overflow-auto grid grid-cols-2 gap-2">
                 {snapshots.length===0 ? (
                   <div className="col-span-2 text-center text-xs text-gray-400">No saved images yet. Click "Save Image" to save your canvas.</div>
                 ) : (
-                  snapshots.map((s, idx) => (
-                    <div key={idx} className="border rounded overflow-hidden cursor-pointer hover:border-gray-400 transition-colors" onClick={()=>{
-                      setViewingImageIndex(idx);
-                    }}>
-                      <img src={s.url} className="w-full h-auto" alt={`Saved image ${idx + 1}`} />
-                    </div>
-                  ))
+                  snapshots.map((s, idx) => {
+                    // Check if this image is selected for any operation
+                    const selectedForOperation = Object.entries(finalOutputSelected).find(
+                      ([_, url]) => url === s.url
+                    )?.[0];
+                    
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`relative border rounded overflow-hidden cursor-pointer transition-colors ${
+                          selectedForOperation
+                            ? 'border-green-500 hover:border-green-600'
+                            : 'border-gray-200 hover:border-gray-400'
+                        }`}
+                        onClick={()=>{
+                          setViewingImageIndex(idx);
+                        }}
+                      >
+                        <img src={s.url} className="w-full h-auto" alt={`Saved image ${idx + 1}`} />
+                        {selectedForOperation && (
+                          <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded">
+                            ✓ {selectedForOperation.charAt(0).toUpperCase() + selectedForOperation.slice(1)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -874,12 +1071,30 @@ export default function Tool3PanelPage() {
               </button>
             )}
             
-            {/* Image counter */}
-            {snapshots.length > 1 && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white bg-black bg-opacity-50 px-4 py-2 rounded text-sm">
-                Image {viewingImageIndex + 1} of {snapshots.length}
-              </div>
-            )}
+            {/* Image counter and selection */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg text-xs space-y-2">
+              {snapshots.length > 1 && (
+                <div>
+                  Image {viewingImageIndex + 1} of {snapshots.length}
+                </div>
+              )}
+              {selectedProblemId && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const operation = getOperationFromProblemId(selectedProblemId);
+                    if (operation) {
+                      handleSelectFinalOutput(snapshots[viewingImageIndex].url, operation);
+                    }
+                  }}
+                  className="w-full mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
+                >
+                  {finalOutputSelected[getOperationFromProblemId(selectedProblemId)] === snapshots[viewingImageIndex].url
+                    ? '✓ Selected for ' + getOperationFromProblemId(selectedProblemId)
+                    : 'Mark as final (' + (selectedProblemId.includes('add') ? 'Addition' : selectedProblemId.includes('sub') ? 'Subtraction' : selectedProblemId.includes('mult') ? 'Multiplication' : 'Division') + ')'}
+                </button>
+              )}
+            </div>
             
             {/* Image */}
             <img 
@@ -903,9 +1118,30 @@ export default function Tool3PanelPage() {
 
 function Draggable({ children, onDrag }: { children: React.ReactNode; onDrag: (dx:number,dy:number)=>void }) {
   const onMouseDown = (e: React.MouseEvent<SVGElement>) => {
+    e.stopPropagation(); // Prevent event bubbling
     const start = { x: e.clientX, y: e.clientY };
-    const move = (ev: MouseEvent) => onDrag(ev.clientX - start.x, ev.clientY - start.y);
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    let hasMoved = false; // Track if mouse moved (drag occurred)
+    const move = (ev: MouseEvent) => {
+      const dx = Math.abs(ev.clientX - start.x);
+      const dy = Math.abs(ev.clientY - start.y);
+      if (dx > 3 || dy > 3) { // Threshold to distinguish click from drag
+        hasMoved = true;
+      }
+      onDrag(ev.clientX - start.x, ev.clientY - start.y);
+    };
+    const up = () => {
+      // If we dragged, prevent click event from interfering with selection
+      if (hasMoved) {
+        // Small delay to let click event pass
+        setTimeout(() => {
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+        }, 0);
+      } else {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+      }
+    };
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
   };
   return (
@@ -1011,7 +1247,7 @@ function EditableText({
   
   return (
     <>
-      <rect x={x-4} y={y-16} width={w} height={h} rx={6} className="fill-white opacity-80 stroke-gray-300" onDoubleClick={onDblClick} onClick={(e)=>{e.stopPropagation(); onSelect?.();}} />
+      <rect x={x-4} y={y-16} width={w} height={h} rx={6} className="fill-white opacity-80 stroke-gray-300" onDoubleClick={onDblClick} onMouseDown={(e)=>{e.stopPropagation(); onSelect?.();}} />
       {isEditing ? (
         <foreignObject x={x-4} y={boxTop} width={w} height={h}>
           <textarea
@@ -1044,7 +1280,7 @@ function EditableText({
             fill: baseTextColor
           }} 
           onDoubleClick={onDblClick} 
-          onClick={(e)=>{e.stopPropagation(); onSelect?.();}}
+          onMouseDown={(e)=>{e.stopPropagation(); onSelect?.();}}
         >
           {textLines.map((line, idx) => (
             <tspan key={idx} x={x} dy={idx === 0 ? 0 : lineHeight}>

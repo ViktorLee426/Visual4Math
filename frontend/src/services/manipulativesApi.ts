@@ -1,8 +1,5 @@
 // frontend/src/services/manipulativesApi.ts
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-const API_BASE_URL = rawBaseUrl !== undefined
-  ? rawBaseUrl.trim().replace(/\/$/, "")
-  : "http://localhost:8000";
+import { API_BASE_URL } from "../utils/apiConfig";
 
 export interface ManipulativeElement {
   id: string;

@@ -180,7 +180,7 @@ export default function ImageBrushTool({ imageUrl, onSave, onCancel }: ImageBrus
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="e.g., Make the banner blue and increase the font size"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-400"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-gray-400 text-gray-900 bg-white"
             autoFocus
           />
         </div>

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 
 export interface LayoutNode {
   id: string;
@@ -10,13 +10,23 @@ export interface LayoutNode {
   label?: string;
   count?: number;
   color?: string;
+  textColor?: string; // Text color for text boxes
+  borderColor?: string;
+  borderWidth?: number;
+  fontSize?: number; // Font size for text boxes
+}
+
+export interface LayoutCanvasRef {
+  exportAsPNG: () => Promise<string>; // Returns base64 PNG data URL
 }
 
 interface LayoutCanvasProps {
   nodes: LayoutNode[];
   setNodes: (nodes: LayoutNode[]) => void;
   selectedId?: string | null;
-  onSelect?: (id: string | null) => void;
+  selectedIds?: string[];
+  onSelect?: (id: string, event?: React.MouseEvent) => void;
+  onDeselect?: () => void;
   relations?: { id: string; from: string; to: string; type: 'inside'|'next-to'|'on-top-of' }[];
   justAdded?: string | null;
   onDelete?: (id: string) => void;
@@ -28,9 +38,10 @@ interface LayoutCanvasProps {
   canRedo?: boolean;
   onHistorySave?: (nodes: LayoutNode[]) => void;
   isParsing?: boolean;
+  parsingTime?: number;
 }
 
-export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, relations = [], justAdded, onDelete, onCopy, onPaste, onUndo, onRedo, canUndo = false, canRedo = false, onHistorySave, isParsing = false }: LayoutCanvasProps) {
+const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, setNodes, selectedId, selectedIds = [], onSelect, onDeselect, relations = [], justAdded, onDelete, onCopy, onPaste, onUndo, onRedo, canUndo = false, canRedo = false, onHistorySave, isParsing = false, parsingTime = 0 }, ref) => {
   const [scale, setScale] = useState(1);
   const [panning, setPanning] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -45,12 +56,127 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
 
   const snap = (v: number) => Math.round(v / 10) * 10; // grid 10px
 
-  const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
-    e.preventDefault();
-    const delta = -e.deltaY;
-    const newScale = Math.min(3, Math.max(0.3, scale + delta * 0.001));
-    setScale(newScale);
+  // Export canvas as PNG with transparent background and margins
+  const exportAsPNG = async (): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!svgRef.current) {
+        reject(new Error('SVG ref not available'));
+        return;
+      }
+
+      // Calculate bounding box of all nodes
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      nodes.forEach(n => {
+        minX = Math.min(minX, n.x);
+        minY = Math.min(minY, n.y);
+        maxX = Math.max(maxX, n.x + n.w);
+        maxY = Math.max(maxY, n.y + n.h);
+      });
+
+      // If no nodes, use default bounds
+      if (nodes.length === 0) {
+        minX = 0;
+        minY = 0;
+        maxX = 800;
+        maxY = 600;
+      }
+
+      // Calculate content dimensions
+      const contentWidth = maxX - minX;
+      const contentHeight = maxY - minY;
+
+      // Add margins (20% padding on each side)
+      const marginPercent = 0.2;
+      const marginX = contentWidth * marginPercent;
+      const marginY = contentHeight * marginPercent;
+
+      // Calculate new bounds with margins
+      const paddedMinX = Math.max(0, minX - marginX);
+      const paddedMinY = Math.max(0, minY - marginY);
+      const paddedMaxX = Math.min(800, maxX + marginX);
+      const paddedMaxY = Math.min(600, maxY + marginY);
+
+      // Calculate offset to center content
+      const offsetX = -paddedMinX;
+      const offsetY = -paddedMinY;
+
+      // Calculate export dimensions
+      const exportWidth = paddedMaxX - paddedMinX;
+      const exportHeight = paddedMaxY - paddedMinY;
+
+      const svg = svgRef.current;
+      // Clone SVG to avoid modifying the original
+      const svgClone = svg.cloneNode(true) as SVGSVGElement;
+      
+      // Set viewBox to the padded area
+      svgClone.setAttribute('viewBox', `${paddedMinX} ${paddedMinY} ${exportWidth} ${exportHeight}`);
+      svgClone.setAttribute('width', exportWidth.toString());
+      svgClone.setAttribute('height', exportHeight.toString());
+      
+      // Remove grid pattern from export
+      const gridRect = svgClone.querySelector('rect[fill="url(#grid)"]');
+      if (gridRect) {
+        gridRect.remove();
+      }
+      const defs = svgClone.querySelector('defs');
+      if (defs) {
+        defs.remove();
+      }
+      
+      // Set transparent background for export
+      svgClone.style.backgroundColor = 'transparent';
+      
+      const svgData = new XMLSerializer().serializeToString(svgClone);
+      
+      // Create a canvas to render the SVG
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+
+      // Set canvas size to match export dimensions
+      canvas.width = exportWidth;
+      canvas.height = exportHeight;
+
+      // Create an image from the SVG
+      const img = new Image();
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+        // Clear canvas with transparent background
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the SVG image
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Convert to PNG with transparent background
+        const pngDataUrl = canvas.toDataURL('image/png');
+        
+        // Clean up
+        URL.revokeObjectURL(url);
+        
+        resolve(pngDataUrl);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to load SVG image'));
+      };
+
+      img.src = url;
+    });
   };
+
+  // Expose export function via ref
+  useImperativeHandle(ref, () => ({
+    exportAsPNG
+  }));
+
+  // Zoom is now only controlled by buttons, not trackpad/wheel
+  // Removed onWheel handler to prevent accidental zooming
 
   const startPan: React.MouseEventHandler = (e) => {
     if ((e.target as Element).tagName === 'svg') {
@@ -81,16 +207,36 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
   const handleMouseDownNode = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     
-    // Normal selection and drag
-    onSelect && onSelect(id);
+    // Normal selection and drag - selection is handled by parent via onSelect
+    // Pass the event so parent can check for Ctrl/Cmd key
+    onSelect && onSelect(id, e);
     containerRef.current?.focus(); // Focus canvas for keyboard shortcuts
     const startNodes = JSON.parse(JSON.stringify(nodes)); // Deep copy initial state
     const start = { x: e.clientX, y: e.clientY };
     let currentId = id;
+    let hasMoved = false; // Track if mouse moved (drag occurred)
+    let clickCount = 0; // Track click count for double-click detection
+    const clickTimer = setTimeout(() => {
+      // Single click - allow drag
+      if (clickCount === 1 && !hasMoved) {
+        // Just selection, no drag started
+      }
+      clickCount = 0;
+    }, 300); // 300ms window for double-click
+    
     const move = (ev: MouseEvent) => {
-      onDrag(currentId, ev.clientX - start.x, ev.clientY - start.y);
+      const dx = Math.abs(ev.clientX - start.x);
+      const dy = Math.abs(ev.clientY - start.y);
+      if (dx > 3 || dy > 3) { // Threshold to distinguish click from drag
+        hasMoved = true;
+        clearTimeout(clickTimer);
+      }
+      if (hasMoved) {
+        onDrag(currentId, ev.clientX - start.x, ev.clientY - start.y);
+      }
     };
     const up = () => {
+      clearTimeout(clickTimer);
       // Get current nodes state (may have been updated during drag)
       // Use ref to get latest nodes value
       const currentNodes = nodesRef.current;
@@ -106,6 +252,7 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
   };
+
 
   const handleMouseDownHandle = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -151,7 +298,7 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
         if (selectedId && onDelete) {
           e.preventDefault();
           onDelete(selectedId);
-          onSelect && onSelect(null);
+          onDeselect && onDeselect();
         }
       }
       
@@ -195,10 +342,15 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
   // Focus canvas when clicking on it, deselect if clicking empty space
   const handleCanvasClick = (e: React.MouseEvent) => {
     const target = e.target as Element;
-    // If clicking on SVG background (not on a node), deselect
-    if (target.tagName === 'svg' || (target.tagName === 'rect' && target.getAttribute('fill') === 'url(#grid)')) {
+    // Only deselect if clicking directly on SVG background or grid pattern
+    // Check if we're clicking on an actual node element (rect, text, foreignObject, g)
+    const isNodeElement = target.closest('g[transform*="translate"]') !== null;
+    const isGridPattern = target.tagName === 'rect' && target.getAttribute('fill') === 'url(#grid)';
+    
+    // Only deselect if clicking on true background (not on any node)
+    if (!isNodeElement && (target.tagName === 'svg' || isGridPattern)) {
       containerRef.current?.focus();
-      onSelect && onSelect(null);
+      onDeselect && onDeselect();
     }
   };
 
@@ -251,14 +403,21 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
           <div className="absolute inset-0 bg-white bg-opacity-90 z-10 flex items-center justify-center rounded-lg">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mx-auto mb-2" />
-              <p className="text-xs text-gray-600 font-medium">Parsing problem...</p>
+              <p className="text-xs text-gray-600 font-medium">Generating layout...</p>
+              {parsingTime > 0 && (
+                <p className="text-xs text-gray-500 mt-1">{parsingTime.toFixed(1)}s</p>
+              )}
             </div>
           </div>
         )}
         <svg
           ref={svgRef}
-          className={`w-full h-[400px] cursor-move bg-gradient-to-br from-gray-50 to-white ${isParsing ? 'opacity-50' : ''}`}
-          onWheel={onWheel}
+          className={`w-full h-[400px] bg-gradient-to-br from-gray-50 to-white ${isParsing ? 'opacity-50' : ''}`}
+          style={{ 
+            cursor: panning ? 'grabbing' : 'grab'
+          }}
+          viewBox="0 0 800 600"
+          preserveAspectRatio="xMidYMid meet"
           onMouseDown={startPan}
           onMouseMove={movePan}
           onMouseUp={endPan}
@@ -291,40 +450,13 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
               </g>
             );
           })}
-          {nodes.map((n, idx) => {
+          {nodes.map((n) => {
             const isJustAdded = justAdded === n.id;
-            const isSelected = selectedId === n.id;
+            const isSelected = selectedIds.length > 0 ? selectedIds.includes(n.id) : selectedId === n.id;
             
-            // Detect overlaps and adjust size for lower layer
-            // Check if this node overlaps with any other node
-            let adjustedW = n.w;
-            let adjustedH = n.h;
-            
-            for (let i = 0; i < nodes.length; i++) {
-              if (i === idx) continue; // Skip self
-              const other = nodes[i];
-              
-              // Check if boxes overlap
-              const overlaps = !(
-                n.x + n.w < other.x ||
-                n.x > other.x + other.w ||
-                n.y + n.h < other.y ||
-                n.y > other.y + other.h
-              );
-              
-              if (overlaps) {
-                // Determine which node is "lower" (earlier in array = lower layer)
-                // Make the lower node bigger to show all text
-                if (idx < i) {
-                  // This node is lower, make it bigger
-                  // Increase size to accommodate overlapping content
-                  // Add padding to ensure text is visible
-                  const padding = 30; // Extra space to show text
-                  adjustedW = Math.max(adjustedW, other.w + padding);
-                  adjustedH = Math.max(adjustedH, other.h + padding);
-                }
-              }
-            }
+            // Use original dimensions - no auto-enlarge on overlap
+            const adjustedW = n.w;
+            const adjustedH = n.h;
             
             return (
             <g key={n.id} transform={`translate(${n.x},${n.y})`}>
@@ -354,78 +486,92 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
                 rx={8}
                 className={`transition-all duration-200 ${
                   isSelected 
-                    ? 'stroke-blue-500 stroke-2 shadow-md' 
-                    : 'stroke-gray-300 stroke'
-                } ${isJustAdded ? 'shadow-lg' : 'shadow-sm'}`}
-                fill={n.color || 'white'}
+                    ? 'shadow-md' 
+                    : 'shadow-sm'
+                } ${isJustAdded ? 'shadow-lg' : ''}`}
+                fill={n.color || (n.type === 'text' ? '#ffffff' : 'white')}
+                stroke={n.type === 'text' 
+                  ? (n.borderColor || '#374151') // Dark gray for text boxes
+                  : (n.borderColor || (isSelected ? '#3b82f6' : '#d1d5db'))
+                }
+                strokeWidth={n.type === 'text'
+                  ? (n.borderWidth !== undefined ? n.borderWidth : 2) // Default 2px for text boxes
+                  : (n.borderWidth !== undefined ? n.borderWidth : (isSelected ? 2 : 1))
+                }
                 onMouseDown={(e) => handleMouseDownNode(e, n.id)}
                 style={{
                   filter: isSelected ? 'drop-shadow(0 4px 6px rgba(59, 130, 246, 0.2))' : undefined,
+                  cursor: 'move',
                 }}
               />
-              {
-                // Render label at top center and count at bottom center
-                (() => {
-                  const base = Math.max(10, Math.min(24, Math.floor(adjustedH / 4)));
+              {/* Display text */}
+              {(() => {
                   const labelText = n.label || n.type;
-                  const countText = n.count ? `×${n.count}` : '';
+                  // Use fontSize from node if available (for text boxes), otherwise calculate based on height
+                  const fontSize = n.type === 'text' && n.fontSize !== undefined 
+                    ? n.fontSize 
+                    : Math.max(10, Math.min(24, Math.floor(adjustedH / 3)));
+                  const lineHeight = fontSize * 1.2;
+                  const padding = 4; // Minimal padding from edges (4px)
                   
-                  // Estimate chars per line for label wrapping
-                  const maxChars = Math.max(4, Math.floor((adjustedW - 12) / (base * 0.55)));
-                  const wrapped: string[] = [];
+                  // Use same word wrapping logic for both text and objects
+                  let lines: string[] = [];
+                  const maxChars = Math.max(4, Math.floor((adjustedW - padding * 2) / (fontSize * 0.55))); // Same calculation for both
                   const words = String(labelText).split(/\s+/);
                   let line = '';
                   for (const w of words) {
                     const test = line ? line + ' ' + w : w;
                     if (test.length > maxChars) {
-                      wrapped.push(line || w);
+                      lines.push(line || w);
                       line = line ? w : '';
                     } else {
                       line = test;
                     }
                   }
-                  if (line) wrapped.push(line);
+                  if (line) lines.push(line);
+                  // Limit lines based on available height
+                  const maxLines = Math.max(1, Math.floor((adjustedH - padding * 2) / (lineHeight)));
+                  lines = lines.slice(0, maxLines);
                   
-                  // Limit lines to fit in top portion of box
-                  const maxLines = Math.max(1, Math.floor((adjustedH / 2 - 8) / (base + 2)));
-                  const labelLines = wrapped.slice(0, maxLines);
-                  const textX = adjustedW / 2; // Center horizontally
+                  // Text positioning - centered for both text and objects
+                  const textX = adjustedW / 2; // Center for both text and objects
+                  // Start from top with minimal padding
+                  const textStartY = 4 + fontSize;
                   
                   return (
                     <g>
-                      {/* Label text at top center */}
-                      {labelLines.length > 0 && (
+                      {/* Label text - start from top, match editing appearance */}
+                      {/* Add pointer-events-none to allow clicks to pass through to rect */}
+                      {lines.length > 0 && (
                         <text 
                           x={textX} 
-                          y={base + 4} 
-                          className="fill-gray-700 select-none" 
-                          textAnchor="middle" 
+                          y={textStartY} 
+                          className="select-none" 
+                          textAnchor="middle"
                           dominantBaseline="hanging" 
-                          style={{ fontSize: base }}
+                          fill={n.type === 'text' ? '#000000' : '#374151'}
+                          style={{ 
+                            fontSize: `${fontSize}px`,
+                            fontFamily: 'Arial, sans-serif',
+                            lineHeight: `${lineHeight}px`,
+                            pointerEvents: 'none', // Allow clicks to pass through to rect underneath
+                          }}
                         >
-                          {labelLines.map((ln, i) => (
-                            <tspan key={i} x={textX} dy={i === 0 ? 0 : base + 2}>{ln}</tspan>
+                          {lines.map((ln, i) => (
+                            <tspan 
+                              key={i} 
+                              x={textX} 
+                              dy={i === 0 ? 0 : lineHeight}
+                            >
+                              {ln}
+                            </tspan>
                           ))}
-                        </text>
-                      )}
-                      {/* Count text at bottom center */}
-                      {countText && (
-                        <text 
-                          x={textX} 
-                          y={adjustedH - 4} 
-                          className="fill-gray-700 select-none" 
-                          textAnchor="middle" 
-                          dominantBaseline="baseline" 
-                          style={{ fontSize: base }}
-                        >
-                          {countText}
                         </text>
                       )}
                     </g>
                   );
-                })()
-              }
-              <title>{(n.label || n.type) + (n.count ? ` ×${n.count}` : '')}</title>
+                })()}
+              <title>{n.label || n.type}</title>
               {/* Resize handle - only visible on hover/selection */}
               {(isSelected || isJustAdded) && (
                 <rect
@@ -445,6 +591,10 @@ export default function LayoutCanvas({ nodes, setNodes, selectedId, onSelect, re
       </div>
     </div>
   );
-}
+});
+
+LayoutCanvas.displayName = 'LayoutCanvas';
+
+export default LayoutCanvas;
 
 

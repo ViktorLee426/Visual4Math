@@ -4,150 +4,236 @@ import { sessionManager } from '../utils/sessionManager';
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
 import PageNavigation from '../components/PageNavigation';
 
-interface EvaluationQuestion {
+interface LikertQuestion {
     id: string;
     question: string;
     required: boolean;
 }
 
-const evaluationQuestions: EvaluationQuestion[] = [
+interface TextQuestion {
+    id: string;
+    question: string;
+    required: boolean;
+}
+
+interface EvaluationCategory {
+    title: string;
+    likertQuestions?: LikertQuestion[];
+    textQuestions?: TextQuestion[];
+}
+
+// Structured evaluation questions by category
+const evaluationCategories: EvaluationCategory[] = [
     {
-        id: 'ease_of_use',
-        question: 'The system is generally easy to use.',
-        required: true
+        title: 'Ease of Use and Learnability',
+        likertQuestions: [
+            {
+                id: 'easy_to_learn',
+                question: 'I found this tool easy to learn and use',
+                required: true
+            },
+            {
+                id: 'confident_creating',
+                question: 'I felt confident creating visuals with this tool',
+                required: true
+            },
+            {
+                id: 'expected_behavior',
+                question: 'The tool behaved in ways I expected',
+                required: true
+            }
+        ]
     },
     {
-        id: 'intuitive',
-        question: 'The system\'s interaction is intuitive.',
-        required: true
+        title: 'Mental Load and Frustration',
+        likertQuestions: [
+            {
+                id: 'mental_effort',
+                question: 'It required a lot of mental effort to use this tool effectively',
+                required: true
+            },
+            {
+                id: 'frustrated',
+                question: 'I felt frustrated while using this tool',
+                required: true
+            }
+        ]
     },
     {
-        id: 'expectations',
-        question: 'The system\'s outputs within each iteration generally follow my expectations.',
-        required: true
+        title: 'Educational Fit and Usefulness',
+        likertQuestions: [
+            {
+                id: 'matched_objects',
+                question: 'The image matched the number of objects I needed for the math problem',
+                required: true
+            },
+            {
+                id: 'communicate_concept',
+                question: 'This tool helped me communicate the math concept effectively',
+                required: true
+            },
+            {
+                id: 'comfortable_teaching',
+                question: 'I would feel comfortable using visuals from this tool in my actual teaching',
+                required: true
+            }
+        ]
     },
     {
-        id: 'design_goals',
-        question: 'The system supports me well in achieving my design goals.',
-        required: true
+        title: 'Creativity and Reuse Potential',
+        likertQuestions: [
+            {
+                id: 'gave_ideas',
+                question: 'This tool gave me ideas for how to visualize the math scenario',
+                required: true
+            },
+            {
+                id: 'use_again',
+                question: 'I would use a tool like this again for other teaching visuals',
+                required: true
+            }
+        ]
     },
     {
-        id: 'creation_time',
-        question: 'The time it takes to generate the image is not too long for me, I am ok with that creation time.',
-        required: true
-    },
-    {
-        id: 'satisfaction',
-        question: 'I am satisfied with the design outcomes I get in the end.',
-        required: true
-    },
-    {
-        id: 'inspiration',
-        question: 'The system gives me inspiration on different possible styles/structures of images.',
-        required: true
-    },
-    {
-        id: 'trust',
-        question: 'I can trust the output of this tool and would use the output for my teaching.',
-        required: true
-    },
-    {
-        id: 'other_tasks',
-        question: 'I would like to use this system for other creative tasks (e.g., furniture design, poster design, presentation slides).',
-        required: true
+        title: 'Open Feedback',
+        textQuestions: [
+            {
+                id: 'likes_dislikes',
+                question: 'What did you like or dislike about this tool?',
+                required: false
+            },
+            {
+                id: 'improvements',
+                question: 'What would you improve or change?',
+                required: false
+            }
+        ]
     }
 ];
 
 export default function Tool2EvalPage() {
-    const [responses, setResponses] = useState<Record<string, number>>({});
+    // State for Likert scale responses (numbers)
+    // Note: Text responses for open feedback are collected during the interview
+    const [likertResponses, setLikertResponses] = useState<Record<string, number>>({});
     const navigate = useNavigate();
 
     useEffect(() => {
         const session = sessionManager.getParticipantData();
         if (!session) {
-            navigate('/');
-            return;
+            console.warn('No session found, but continuing in dev mode');
+            // In dev mode, don't redirect - just continue
+        } else {
+            sessionManager.updatePhase('tool2-eval');
         }
-        sessionManager.updatePhase('tool2-eval');
     }, [navigate]);
 
-    const handleResponseChange = (questionId: string, value: number) => {
-        setResponses(prev => ({ ...prev, [questionId]: value }));
+    // Handle Likert scale responses (1-7)
+    const handleLikertChange = (questionId: string, value: number) => {
+        setLikertResponses(prev => ({ ...prev, [questionId]: value }));
     };
 
-    const handleNext = () => {
-        // Save evaluation data (even if incomplete)
-        sessionManager.savePhaseData('tool2-eval', { responses });
-        sessionManager.updatePhase('tool3-intro');
-        navigate('/tool3-intro');
+    // Note: Text responses for open feedback questions are collected during the interview
+
+    const handleBackToInstructions = () => {
+        // Save responses before navigating
+        // Text responses for open feedback are collected during the interview
+        const textResponses: Record<string, string> = {};
+        const allResponses = { ...likertResponses, ...textResponses };
+        sessionManager.savePhaseData('tool2-eval', { 
+            likertResponses, 
+            textResponses,
+            allResponses 
+        });
+        navigate('/instructions');
     };
 
-    const allRequiredAnswered = evaluationQuestions.every(q => 
-        !q.required || (responses[q.id] !== undefined && responses[q.id] > 0)
-    );
+    // Check if all required Likert questions are answered
+    const allRequiredLikertAnswered = evaluationCategories
+        .flatMap(cat => cat.likertQuestions || [])
+        .every(q => !q.required || (likertResponses[q.id] !== undefined && likertResponses[q.id] > 0));
 
     return (
         <div className="min-h-screen bg-white">
             <TimeProportionalProgress currentPhase="tool2-eval" />
 
-            <div className="min-h-screen flex items-center justify-center px-8 pt-24 pb-8">
-                <div className="max-w-3xl w-full space-y-6">
+            <div className="min-h-screen flex items-start justify-center px-4 pt-16 pb-8 ml-56">
+                <div className="max-w-6xl w-full space-y-6">
                     <h1 className="text-2xl font-semibold text-gray-900 text-center">
-                        Evaluation: Tool 2 (Layout-Based Interface)
+                        Evaluation: Tool B (Layout-Based Interface)
                     </h1>
                     
-                    <div className="bg-white rounded-lg p-8 border border-gray-200">
-                        <p className="text-sm text-gray-600 mb-6">
+                    <div className="space-y-4">
+                        <p className="text-base text-gray-600 text-center">
                             Please rate your agreement with each statement on a scale of 1 (Strongly Disagree) to 7 (Strongly Agree).
                         </p>
                         
-                        <div className="space-y-8">
-                            {evaluationQuestions.map((question) => (
-                                <div key={question.id} className="space-y-3">
-                                    <label className="block text-sm font-medium text-gray-900">
-                                        {question.question}
-                                        {question.required && <span className="text-red-500 ml-1">*</span>}
-                                    </label>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs text-gray-500 w-28 flex-shrink-0">Strongly Disagree</span>
-                                        <div className="flex gap-3 flex-1 justify-between items-center px-2">
-                                            {[1, 2, 3, 4, 5, 6, 7].map((value) => (
-                                                <label
-                                                    key={value}
-                                                    className="flex flex-col items-center cursor-pointer flex-1"
-                                                >
-                                                    <input
-                                                        type="radio"
-                                                        name={question.id}
-                                                        value={value}
-                                                        checked={responses[question.id] === value}
-                                                        onChange={() => handleResponseChange(question.id, value)}
-                                                        className="w-4 h-4 text-gray-900 focus:ring-gray-500"
-                                                    />
-                                                    <span className="text-[10px] text-gray-600 mt-1">{value}</span>
-                                                </label>
-                                            ))}
+                        {/* Separate box for each category */}
+                        {evaluationCategories.map((category, catIndex) => (
+                            <div key={catIndex} className="bg-white rounded-lg p-6 border border-gray-200">
+                                {/* Category Title */}
+                                <h2 className="text-lg font-semibold text-gray-900 border-b-2 border-gray-300 pb-2 mb-4">
+                                    {category.title}
+                                </h2>
+                                
+                                <div className="space-y-5">
+                                    {/* Likert Scale Questions */}
+                                    {category.likertQuestions && category.likertQuestions.map((question) => (
+                                        <div key={question.id} className="space-y-3">
+                                            <label className="block text-base font-medium text-gray-900">
+                                                {question.question}
+                                                {question.required && <span className="text-red-500 ml-1">*</span>}
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-sm text-gray-500 w-28 flex-shrink-0">Strongly Disagree</span>
+                                                <div className="flex gap-3 flex-1 justify-between items-center px-2">
+                                                    {[1, 2, 3, 4, 5, 6, 7].map((value) => (
+                                                        <label
+                                                            key={value}
+                                                            className="flex flex-col items-center cursor-pointer flex-1"
+                                                        >
+                                                            <input
+                                                                type="radio"
+                                                                name={question.id}
+                                                                value={value}
+                                                                checked={likertResponses[question.id] === value}
+                                                                onChange={() => handleLikertChange(question.id, value)}
+                                                                className="w-5 h-5 text-gray-900 focus:ring-gray-500"
+                                                            />
+                                                            <span className="text-xs text-gray-600 mt-1">{value}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                                <span className="text-sm text-gray-500 w-28 flex-shrink-0 text-right">Strongly Agree</span>
+                                            </div>
                                         </div>
-                                        <span className="text-xs text-gray-500 w-28 flex-shrink-0 text-right">Strongly Agree</span>
-                                    </div>
+                                    ))}
+                                    
+                                    {/* Text Questions (for Open Feedback - displayed but no input) */}
+                                    {category.textQuestions && category.textQuestions.map((question) => (
+                                        <div key={question.id} className="space-y-2 mb-6">
+                                            <p className="block text-base font-medium text-gray-900">
+                                                {question.question}
+                                            </p>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
 
                     <PageNavigation 
                         currentPage={7} 
                         onBack={() => navigate('/tool2')}
-                        backLabel="Back to Tool 2 Task"
-                        onNext={handleNext}
-                        nextLabel="Continue to Tool 3"
+                        backLabel="Back to Tool B Task"
+                        onNext={handleBackToInstructions}
+                        nextLabel="Back to Instructions"
                         showBack={true}
                         showNext={true}
                     />
                     
-                    {!allRequiredAnswered && (
+                    {!allRequiredLikertAnswered && (
                         <p className="text-xs text-gray-500 text-center mt-2">
-                            Note: You can navigate freely, but answering all questions is recommended.
+                            Note: You can navigate freely, but answering all required questions is recommended.
                         </p>
                     )}
                 </div>

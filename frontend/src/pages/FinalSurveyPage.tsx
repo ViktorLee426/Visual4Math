@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import eth_peach from "../assets/eth_peach.png";
 import { sessionManager } from '../utils/sessionManager';
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
 
@@ -12,37 +11,43 @@ interface InterviewQuestion {
 
 const interviewQuestions: InterviewQuestion[] = [
     {
-        id: 'overall',
-        question: 'How was your overall experience with those 3 tools, is there any tool that leaves you very positive / negative experience and can you explain why?'
+        id: 'general_reflection',
+        question: 'General Reflection (across all tools)',
+        subQuestions: [
+            'Can you walk me through your overall experience with the three tools?',
+            'Was there a tool that felt especially helpful or frustrating? Why?',
+            'Which tool gave you the most control over the final image, and how?',
+            'Which one do you think best supports your needs as a teacher?'
+        ]
     },
     {
         id: 'conversational',
-        question: 'Question regarding the conversational tool:',
+        question: 'Conversational Tool (Chatbot)',
         subQuestions: [
-            'How is your experience with the chatbox mode image creation in general?',
-            'Are you satisfied with the quality of the generation results in each iteration?',
-            'Do you think the brush modification helps with those iterations?',
-            'Do you think this is mentally demanding?'
+            'What was your experience like using the chatbox to create images?',
+            'How did the quality of image generation feel across different prompts?',
+            'How did you find the process of making edits using the brush?',
+            'In what ways did this tool feel mentally demanding or straightforward?'
         ]
     },
     {
         id: 'layout',
-        question: 'Question regarding the layout-based tool:',
+        question: 'Layout-Based Tool',
         subQuestions: [
-            'How is your overall experience?',
-            'Are you satisfied with the quality of the generation results? Compared to the conversational interface?',
-            'Did you feel better sense of control for the image creation?',
-            'Do you think adjust the layout is tiring? Do you like the proposed layout in the canvas?'
+            'How did it feel to work with a visual layout for creating images?',
+            'What was your impression of the proposed layout from the system?',
+            'Did editing the layout help you get closer to what you wanted? Why or why not?',
+            'Were there any moments where layout adjustments felt confusing or time-consuming?'
         ]
     },
     {
         id: 'free_editing',
-        question: 'Question regarding the free editing tool:',
+        question: 'Direct Editing Tool (Free editing)',
         subQuestions: [
-            'How is your overall experience?',
-            'Are you satisfied with the generated image, compared with other two tools?',
-            'How do you think the quality of the proposed structure in the canvas?',
-            'Do you feel more sense of control for the image creation?'
+            'How was your experience editing the image directly on the canvas?',
+            'What did you think of the initial structure proposed by the system?',
+            'Did this tool give you a greater sense of control over the image? How?',
+            'Compared to the other tools, how satisfied were you with the results here?'
         ]
     }
 ];
@@ -52,12 +57,12 @@ export default function FinalSurveyPage() {
 
     useEffect(() => {
         const session = sessionManager.getParticipantData();
-        if (!session) {
-            navigate('/');
-            return;
+        // Allow access even without session for navigation purposes
+        // Just update phase if session exists
+        if (session) {
+            sessionManager.updatePhase('final-survey');
         }
-        sessionManager.updatePhase('final-survey');
-    }, [navigate]);
+    }, []);
 
     const handleComplete = () => {
         // Mark as completed
@@ -70,18 +75,9 @@ export default function FinalSurveyPage() {
 
     return (
         <div className="min-h-screen bg-white">
-            {/* Very top center logo */}
-            <div className="fixed top-0 left-0 w-full flex justify-center py-1 bg-white z-20">
-                <img 
-                    src={eth_peach} 
-                    alt="ETH Zurich PEACH Lab" 
-                    className="h-8 w-auto" 
-                />
-            </div>
-            
             <TimeProportionalProgress currentPhase="final-survey" />
 
-            <div className="min-h-screen flex items-center justify-center px-8 pt-24 pb-8">
+            <div className="min-h-screen flex items-start justify-center px-8 pt-16 pb-8 ml-56">
                 <div className="max-w-4xl w-full space-y-8">
                     <h1 className="text-3xl font-bold text-gray-800 text-center mb-4">
                         Final Post-Study Survey Interview
@@ -94,14 +90,23 @@ export default function FinalSurveyPage() {
                     </div>
 
                     <div className="bg-white rounded-lg border border-gray-200 p-8 space-y-8">
-                        {/* Question 1 */}
-                        <div className="space-y-3">
+                        {/* Question 1 - General Reflection */}
+                        <div className="space-y-4">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 1. {interviewQuestions[0].question}
                             </h2>
+                            <div className="ml-6 space-y-3">
+                                {interviewQuestions[0].subQuestions?.map((subQ, idx) => (
+                                    <div key={idx} className="space-y-1">
+                                        <p className="text-base text-gray-800">
+                                            <span className="font-medium">1.{idx + 1}</span> - {subQ}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        {/* Question 2 */}
+                        {/* Question 2 - Conversational Tool */}
                         <div className="space-y-4 pt-4 border-t border-gray-200">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 2. {interviewQuestions[1].question}
@@ -117,7 +122,7 @@ export default function FinalSurveyPage() {
                             </div>
                         </div>
 
-                        {/* Question 3 */}
+                        {/* Question 3 - Layout-Based Tool */}
                         <div className="space-y-4 pt-4 border-t border-gray-200">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 3. {interviewQuestions[2].question}
@@ -133,7 +138,7 @@ export default function FinalSurveyPage() {
                             </div>
                         </div>
 
-                        {/* Question 4 */}
+                        {/* Question 4 - Direct Editing Tool */}
                         <div className="space-y-4 pt-4 border-t border-gray-200">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 4. {interviewQuestions[3].question}
@@ -152,10 +157,10 @@ export default function FinalSurveyPage() {
 
                     <div className="flex justify-between items-center gap-4">
                         <button
-                            onClick={() => navigate('/final-comparison')}
+                            onClick={() => navigate('/tool3-eval')}
                             className="px-8 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-lg font-semibold transition-colors"
                         >
-                            ← Back to Final Comparison
+                            ← Back to Evaluation
                         </button>
                         
                         <button

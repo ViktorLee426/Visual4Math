@@ -1,8 +1,12 @@
 // frontend/src/utils/sessionManager.ts
+import { getToolOrdering } from './toolOrdering';
+import type { ToolOrdering } from './toolOrdering';
+
 export interface ParticipantData {
   participantId: string;
   currentPhase: string;
   startTime: string;
+  toolOrdering?: ToolOrdering; // Add this line
   consent: {
     agreed: boolean;
     signature: string;
@@ -49,10 +53,13 @@ export class SessionManager {
 
   // Initialize new participant session
   public initializeParticipant(participantId: string): void {
+    const toolOrdering = getToolOrdering(participantId);
+    
     this.participantData = {
       participantId,
       currentPhase: 'welcome',
       startTime: new Date().toISOString(),
+      toolOrdering, // Store the ordering
       consent: null,
       demographics: null,
       closedTasks: { task1: null, task2: null },
@@ -62,7 +69,7 @@ export class SessionManager {
       session_data: {}
     };
     this.saveSession();
-    console.log('Participant initialized:', participantId, 'Session saved');
+    console.log('Participant initialized:', participantId, 'Tool ordering:', toolOrdering, 'Session saved');
   }
 
   // Save current session to sessionStorage (clears when browser is closed)
@@ -92,9 +99,17 @@ export class SessionManager {
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
         this.participantData = parsed;
+        
+        // Ensure toolOrdering exists for existing sessions
+        if (this.participantData && !this.participantData.toolOrdering && this.participantData.participantId) {
+          this.participantData.toolOrdering = getToolOrdering(this.participantData.participantId);
+          this.saveSession();
+        }
+        
         console.log('Session loaded from session storage:', {
           participantId: this.participantData?.participantId,
-          currentPhase: this.participantData?.currentPhase
+          currentPhase: this.participantData?.currentPhase,
+          toolOrdering: this.participantData?.toolOrdering
         });
         return this.participantData;
       }
@@ -123,7 +138,9 @@ export class SessionManager {
         let cleanData = data;
         
         // For task data, trim conversation and keep only lightweight images (URLs or tiny base64)
-        if (phase.startsWith('tool-') || phase.startsWith('closed-task-') || phase.startsWith('open-task-')) {
+        // Check for both 'tool-' prefix and 'tool1-task', 'tool2-task', 'tool3-task' formats
+        if (phase.startsWith('tool-') || phase.startsWith('closed-task-') || phase.startsWith('open-task-') || 
+            phase === 'tool1-task' || phase === 'tool2-task' || phase === 'tool3-task') {
             const MAX_MESSAGES = 30; // keep recent messages
             const MAX_INLINE_IMAGE_CHARS = 20000; // keep tiny inline previews only
 
@@ -133,15 +150,16 @@ export class SessionManager {
                 if (clone.conversation_log.length > MAX_MESSAGES) {
                     clone.conversation_log = clone.conversation_log.slice(-MAX_MESSAGES);
                 }
-                // Keep http/https URLs; drop large base64; keep very small base64 previews
+                // Keep http/https URLs and relative URLs (like /api/images/{id}); drop large base64; keep very small base64 previews
                 clone.conversation_log = clone.conversation_log.map((m: any) => {
                     if (!m) return m;
                     if (m.image_url && typeof m.image_url === 'string') {
                         const url: string = m.image_url;
                         const isInline = url.startsWith('data:image');
-                        const isHttp = url.startsWith('http');
-                        if (isHttp) {
-                            // safe to keep
+                        const isHttp = url.startsWith('http://') || url.startsWith('https://');
+                        const isRelative = url.startsWith('/'); // Relative URLs like /api/images/{id}
+                        if (isHttp || isRelative) {
+                            // safe to keep - these are server URLs, not large base64
                             return m;
                         }
                         if (isInline) {
@@ -322,6 +340,11 @@ export class SessionManager {
   // Export data for research analysis
   public exportData(): string {
     return JSON.stringify(this.participantData, null, 2);
+  }
+
+  // Add a method to get tool ordering
+  public getToolOrdering(): ToolOrdering | null {
+    return this.participantData?.toolOrdering || null;
   }
 }
 

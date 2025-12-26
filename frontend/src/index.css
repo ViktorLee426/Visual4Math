@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ensure horizontal scrolling works when content is wider than viewport */
+html, body {
+  overflow-x: auto;
+  min-width: 0;
+  width: 100%;
+}
+
+#root {
+  width: 100%;
+  min-width: 0;
+}
+
 /* Custom Slider Styles */
 .custom-slider::-webkit-slider-thumb {
   appearance: none;
@@ -34,4 +46,14 @@
 
 .custom-slider:hover::-moz-range-thumb {
   background-color: #2563eb;
+}
+
+/* Ensure inputs and textareas have visible text */
+input, textarea {
+  color: #111827; /* gray-900 */
+  background-color: #ffffff; /* white */
+}
+
+input::placeholder, textarea::placeholder {
+  color: #9ca3af; /* gray-400 */
 }

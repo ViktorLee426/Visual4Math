@@ -60,7 +60,7 @@ export default function HorizontalProgress({ currentPage }: HorizontalProgressPr
       </div>
       
       {/* Progress bar - cleaner design */}
-      <div className="max-w-7xl w-full mx-auto px-4">
+      <div className="max-w-2xl w-full mx-auto pl-4 pr-1">
         <div className="h-1 bg-gray-100 rounded-full relative">
           <div 
             className="h-1 bg-gray-900 rounded-full absolute top-0 left-0 transition-all duration-300" 
