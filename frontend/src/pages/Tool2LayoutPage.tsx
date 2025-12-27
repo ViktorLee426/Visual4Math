@@ -4,10 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { sessionManager } from '../utils/sessionManager';
 import LayoutCanvas from '../components/layout/LayoutCanvas';
 import type { LayoutNode, LayoutCanvasRef } from '../components/layout/LayoutCanvas';
-import { generateImageFromPrompt, generateImageFromPromptStream } from '../services/imageApi';
+import { generateImageFromPromptStream } from '../services/imageApi';
 import { parseMathWordProblem, type LayoutItem } from '../services/parseApi';
 import { toolBProblems } from '../data/mathProblems';
-import PageNavigation from '../components/PageNavigation';
 
 import { API_BASE_URL } from '../utils/apiConfig';
 
@@ -84,7 +83,7 @@ export default function Tool2LayoutPage() {
   const [nodes, setNodes] = useState<LayoutNode[]>([]);
   type GenItem = { url: string; ts: number; generationTime?: number; isPartial?: boolean };
   const [generationHistory, setGenerationHistory] = useState<GenItem[]>([]);
-  const [selectedIdx, setSelectedIdx] = useState<number>(-1);
+  const [, setSelectedIdx] = useState<number>(-1);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [relations] = useState<{ id: string; from: string; to: string; type: 'inside'|'next-to'|'on-top-of' }[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -411,23 +410,6 @@ export default function Tool2LayoutPage() {
     }
   };
 
-  const stopParsing = () => {
-    if (parseAbortControllerRef.current) {
-      parseAbortControllerRef.current.abort();
-      parseAbortControllerRef.current = null;
-    }
-    setIsParsing(false);
-    setParsingTime(0);
-    parseStartTimeRef.current = null;
-    if (parseTimerIntervalRef.current) {
-      clearInterval(parseTimerIntervalRef.current);
-      parseTimerIntervalRef.current = null;
-    }
-    // Clear canvas
-    setHistory([[]]);
-    setHistoryIndex(0);
-    setNodes([]);
-  };
 
   const clearCanvas = () => {
     if (window.confirm('Are you sure you want to clear the canvas? This will remove all elements.')) {
@@ -663,7 +645,7 @@ export default function Tool2LayoutPage() {
         layoutInfo,
         layoutImageDataUrl, // Pass the layout image
         // onPartialImage callback
-        (imageB64: string, index: number) => {
+        (imageB64: string) => {
           // Convert base64 to data URL
           const dataUrl = `data:image/png;base64,${imageB64}`;
           const partialItem: GenItem = {
@@ -1222,34 +1204,6 @@ export default function Tool2LayoutPage() {
         </div>
       )}
     </div>
-  );
-}
-
-// Auto-expanding textarea component
-function AutoExpandingTextarea({ value, placeholder, onChange }: { value: string; placeholder?: string; onChange: (value: string) => void }) {
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  
-  React.useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      // Reset height to auto to get the correct scrollHeight
-      textarea.style.height = 'auto';
-      // Set height based on content, with min and max constraints
-      const newHeight = Math.min(Math.max(textarea.scrollHeight, 24), 150); // Min 24px, max 150px
-      textarea.style.height = `${newHeight}px`;
-    }
-  }, [value]);
-  
-  return (
-    <textarea
-      ref={textareaRef}
-      className="w-full border border-gray-200 rounded px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white resize-none overflow-y-auto"
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      rows={1}
-      style={{ minHeight: '24px', maxHeight: '150px' }}
-    />
   );
 }
 

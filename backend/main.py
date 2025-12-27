@@ -84,6 +84,14 @@ if os.path.exists(static_assets_path):
 else:
     print(f"⚠️  Static assets directory not found: {static_assets_path} (frontend not built yet)")
 
+# Serve videos directory (for demo videos)
+static_videos_path = "static/videos"
+if os.path.exists(static_videos_path):
+    app.mount("/videos", StaticFiles(directory=static_videos_path), name="videos")
+    print(f"✅ Videos directory mounted from {static_videos_path}")
+else:
+    print(f"⚠️  Videos directory not found: {static_videos_path}")
+
 # Serve favicon only if it exists
 if os.path.exists(static_favicon_path):
     @app.get("/favicon.png")
@@ -99,6 +107,7 @@ if os.path.exists(static_index_path):
     async def serve_spa(full_path: str):
         # Exclude API routes and docs - but NOT /images/ since that's a valid API route
         # FastAPI will match /images/{id} before this catch-all due to route specificity
+        # Videos and assets are handled by mounts above, so they won't reach here
         if full_path.startswith(("api", "docs", "redoc", "chat", "image", "research")):
             raise HTTPException(status_code=404)
         return FileResponse(static_index_path)

@@ -1,0 +1,71 @@
+{
+  "timestamp": "2025-12-14T01:22:16.102047",
+  "prompt": "There are three green apples and two red apples. If we take away three green apples, how many apples are there in total?\n\n=== LAYOUT SPECIFICATION (MUST FOLLOW EXACTLY) ===\n\nCRITICAL COUNT REQUIREMENTS (READ CAREFULLY - THESE ARE MANDATORY):\n- Show EXACTLY 1 green apple (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 green apple, no more, no less\n- Count verification: When counting green apple in the image, the total must equal 1\n- Show EXACTLY 1 green apple (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 green apple, no more, no less\n- Count verification: When counting green apple in the image, the total must equal 1\n- Show EXACTLY 1 red apple (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 red apple, no more, no less\n- Count verification: When counting red apple in the image, the total must equal 1\n- Show EXACTLY 1 red apple (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 red apple, no more, no less\n- Count verification: When counting red apple in the image, the total must equal 1\n\nVERIFICATION INSTRUCTIONS:\n- Before finalizing the image, COUNT each object type visually\n- Verify that the count matches EXACTLY what is specified above\n- If counts don't match, regenerate the image with correct counts\n- DO NOT approximate or estimate - use the EXACT numbers specified\n- Each object must be clearly visible and countable in the final image\n\nOBJECTS IN SCENE:\n1. 3 green + 2 red apples: 3 green + 2 red apples positioned at approximately 6% from left, 5% from top, wide shape\n2. green apple: EXACTLY 1 green apple, object color: #c8e6c9 positioned at approximately 13% from left, 33% from top, square shape\n3. green apple: EXACTLY 1 green apple, object color: #c8e6c9 positioned at approximately 28% from left, 33% from top, square shape\n4. red apple: EXACTLY 1 red apple, object color: #ffcdd2 positioned at approximately 40% from left, 33% from top, square shape\n5. red apple: EXACTLY 1 red apple, object color: #ffcdd2 positioned at approximately 55% from left, 33% from top, square shape\n\n=== END LAYOUT SPECIFICATION ===\n\nFINAL INSTRUCTIONS:\nGenerate the visualization following this layout EXACTLY.\nPay special attention to object counts - they must be precise.\nCount each object type in your generated image and verify it matches the specification.\nIf you generate an image with incorrect counts, you have failed the task.\nThe accuracy of object counts is the most important aspect of this visualization.\n\nIMPORTANT COLOR INSTRUCTIONS:\n- Colors specified above (e.g., \"object color: #bbdefb\") refer ONLY to the objects themselves, NOT the background\n- Use a neutral, clean background (white, light gray, or transparent) - do NOT use object colors for the background\n- The background should be plain and unobtrusive to keep focus on the objects\n",
+  "layout_info": {
+    "nodes": [
+      {
+        "id": "n_1765671287395_0_cccb",
+        "type": "text",
+        "label": "3 green + 2 red apples",
+        "x": 50,
+        "y": 30,
+        "w": 300,
+        "h": 40,
+        "color": "#ffffff"
+      },
+      {
+        "id": "n_1765671287395_1_2bsy",
+        "type": "box",
+        "label": "green apple",
+        "count": 1,
+        "x": 100,
+        "y": 200,
+        "w": 100,
+        "h": 100,
+        "color": "#c8e6c9"
+      },
+      {
+        "id": "n_1765671287395_2_ssq9",
+        "type": "box",
+        "label": "green apple",
+        "count": 1,
+        "x": 220,
+        "y": 200,
+        "w": 100,
+        "h": 100,
+        "color": "#c8e6c9"
+      },
+      {
+        "id": "n_1765671287395_3_ijgj",
+        "type": "box",
+        "label": "red apple",
+        "count": 1,
+        "x": 320,
+        "y": 200,
+        "w": 100,
+        "h": 100,
+        "color": "#ffcdd2"
+      },
+      {
+        "id": "n_1765671287395_4_pmx4",
+        "type": "box",
+        "label": "red apple",
+        "count": 1,
+        "x": 440,
+        "y": 200,
+        "w": 100,
+        "h": 100,
+        "color": "#ffcdd2"
+      }
+    ],
+    "prompt": "There are three green apples and two red apples. If we take away three green apples, how many apples are there in total?",
+    "canvas_size": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "image_id": "d6f0e2242a94f284",
+  "image_url": "/images/d6f0e2242a94f284",
+  "tool": "Tool2LayoutPage",
+  "generation_time": "2025-12-14T00:21:24.055Z"
+}

@@ -96,10 +96,6 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
       const paddedMaxX = Math.min(800, maxX + marginX);
       const paddedMaxY = Math.min(600, maxY + marginY);
 
-      // Calculate offset to center content
-      const offsetX = -paddedMinX;
-      const offsetY = -paddedMinY;
-
       // Calculate export dimensions
       const exportWidth = paddedMaxX - paddedMinX;
       const exportHeight = paddedMaxY - paddedMinY;

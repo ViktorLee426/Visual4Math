@@ -1,0 +1,77 @@
+{
+  "timestamp": "2025-12-25T00:04:56.016679",
+  "prompt": "There are three green apples and two red apples. If we take away three green apples, how many apples are there in total?\n\n=== LAYOUT SPECIFICATION (MUST FOLLOW EXACTLY) ===\n\nOBJECTS IN SCENE:\n1. red apple, object color: #DF536B positioned at approximately 6% from left, 18% from top, wide shape\n2. red apple, object color: #DF536B positioned at approximately 6% from left, 35% from top, wide shape\n3. green apple , object color: #61D04F positioned at approximately 51% from left, 18% from top, wide shape\n4. red apple, object color: #DF536B positioned at approximately 26% from left, 18% from top, wide shape\n5. text, object color: #1c5e30 positioned at approximately 33% from left, 5% from top, wide shape\n6. green apple , object color: #61D04F positioned at approximately 51% from left, 35% from top, wide shape\n\n=== END LAYOUT SPECIFICATION ===\n\nFINAL INSTRUCTIONS:\nGenerate the visualization following this layout EXACTLY.\nIMPORTANT COLOR INSTRUCTIONS:\n- Colors specified above (e.g., \"object color: #bbdefb\") refer ONLY to the objects themselves, NOT the background\n- Use a neutral, clean background (white, light gray, or transparent) - do NOT use object colors for the background\n- The background should be plain and unobtrusive to keep focus on the objects\n",
+  "layout_info": {
+    "nodes": [
+      {
+        "id": "n_1766616985800_ni35",
+        "type": "object",
+        "label": "red apple",
+        "x": 50,
+        "y": 110,
+        "w": 140,
+        "h": 90,
+        "color": "#DF536B"
+      },
+      {
+        "id": "n_1766616986261_p1oa",
+        "type": "object",
+        "label": "red apple",
+        "x": 50,
+        "y": 210,
+        "w": 140,
+        "h": 90,
+        "color": "#DF536B"
+      },
+      {
+        "id": "n_1766616986435_hyu1",
+        "type": "object",
+        "label": "green apple ",
+        "x": 410,
+        "y": 110,
+        "w": 140,
+        "h": 90,
+        "color": "#61D04F"
+      },
+      {
+        "id": "n_1766616987096_bdpf",
+        "type": "object",
+        "label": "red apple",
+        "x": 210,
+        "y": 110,
+        "w": 140,
+        "h": 90,
+        "color": "#DF536B"
+      },
+      {
+        "id": "n_1766617034334_fnxl",
+        "type": "text",
+        "label": "text",
+        "x": 260,
+        "y": 30,
+        "w": 110,
+        "h": 60,
+        "color": "#1c5e30"
+      },
+      {
+        "id": "n_1766617368551_jpxs",
+        "type": "object",
+        "label": "green apple ",
+        "x": 410,
+        "y": 210,
+        "w": 140,
+        "h": 90,
+        "color": "#61D04F"
+      }
+    ],
+    "prompt": "There are three green apples and two red apples. If we take away three green apples, how many apples are there in total?",
+    "canvas_size": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "image_id": "ff8df94cd168f3eb",
+  "image_url": "/images/ff8df94cd168f3eb",
+  "tool": "Tool2LayoutPage",
+  "generation_time": "2025-12-24T23:04:24.125Z"
+}

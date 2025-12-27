@@ -1,0 +1,123 @@
+{
+  "timestamp": "2025-12-13T23:21:31.449422",
+  "prompt": "There are 6 stars that need to be shared equally among 3 boxes. How many stars go in each box?\n\n=== LAYOUT SPECIFICATION (MUST FOLLOW EXACTLY) ===\n\nCRITICAL COUNT REQUIREMENTS (READ CAREFULLY - THESE ARE MANDATORY):\n- Show EXACTLY 1 star (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 star, no more, no less\n- Count verification: When counting star in the image, the total must equal 1\n- Show EXACTLY 1 star (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 star, no more, no less\n- Count verification: When counting star in the image, the total must equal 1\n- Show EXACTLY 1 star (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 star, no more, no less\n- Count verification: When counting star in the image, the total must equal 1\n- Show EXACTLY 1 star (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 star, no more, no less\n- Count verification: When counting star in the image, the total must equal 1\n- Show EXACTLY 1 star (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 star, no more, no less\n- Count verification: When counting star in the image, the total must equal 1\n- Show EXACTLY 1 star (not 0, not 2, precisely 1 items)\n- CRITICAL: The image MUST contain exactly 1 star, no more, no less\n- Count verification: When counting star in the image, the total must equal 1\n\nVERIFICATION INSTRUCTIONS:\n- Before finalizing the image, COUNT each object type visually\n- Verify that the count matches EXACTLY what is specified above\n- If counts don't match, regenerate the image with correct counts\n- DO NOT approximate or estimate - use the EXACT numbers specified\n- Each object must be clearly visible and countable in the final image\n\nOBJECTS IN SCENE:\n1. 6 stars shared equally among 3 boxes. How many stars in each box?: 6 stars shared equally among 3 boxes. How many stars in each box? positioned at approximately 6% from left, 5% from top, wide shape\n2. box: box, object color: #f5f5f5 positioned at approximately 1% from left, 30% from top, wide shape\n3. box: box, object color: #f5f5f5 positioned at approximately 38% from left, 30% from top, square shape\n4. box: box, object color: #f5f5f5 positioned at approximately 68% from left, 32% from top, square shape\n5. star: EXACTLY 1 star, object color: #fff9c4 positioned at approximately 79% from left, 47% from top, square shape\n6. star: EXACTLY 1 star, object color: #fff9c4 positioned at approximately 69% from left, 43% from top, tall shape\n7. star: EXACTLY 1 star, object color: #fff9c4 positioned at approximately 53% from left, 45% from top, tall shape\n8. star: EXACTLY 1 star, object color: #fff9c4 positioned at approximately 41% from left, 47% from top, tall shape\n9. star: EXACTLY 1 star, object color: #fff9c4 positioned at approximately 20% from left, 45% from top, square shape\n10. star: EXACTLY 1 star, object color: #fff9c4 positioned at approximately 3% from left, 45% from top, square shape\n\nSPATIAL RELATIONSHIPS:\n- star (1 star) is contained inside box\n- star (1 star) is contained inside box\n- star (1 star) is contained inside box\n- star (1 star) is contained inside box\n- star (1 star) is contained inside box\n- star (1 star) is contained inside box\n- box is contained inside star\n\n=== END LAYOUT SPECIFICATION ===\n\nFINAL INSTRUCTIONS:\nGenerate the visualization following this layout EXACTLY.\nPay special attention to object counts - they must be precise.\nCount each object type in your generated image and verify it matches the specification.\nIf you generate an image with incorrect counts, you have failed the task.\nThe accuracy of object counts is the most important aspect of this visualization.\n\nIMPORTANT COLOR INSTRUCTIONS:\n- Colors specified above (e.g., \"object color: #bbdefb\") refer ONLY to the objects themselves, NOT the background\n- Use a neutral, clean background (white, light gray, or transparent) - do NOT use object colors for the background\n- The background should be plain and unobtrusive to keep focus on the objects\n",
+  "layout_info": {
+    "nodes": [
+      {
+        "id": "n_1765664284762_0_yexj",
+        "type": "text",
+        "label": "6 stars shared equally among 3 boxes. How many stars in each box?",
+        "x": 50,
+        "y": 30,
+        "w": 700,
+        "h": 40,
+        "color": "#ffffff"
+      },
+      {
+        "id": "n_1765664284762_1_uumz",
+        "type": "box",
+        "label": "box",
+        "x": 10,
+        "y": 180,
+        "w": 280,
+        "h": 230,
+        "color": "#f5f5f5"
+      },
+      {
+        "id": "n_1765664284762_2_2nta",
+        "type": "box",
+        "label": "box",
+        "x": 300,
+        "y": 180,
+        "w": 230,
+        "h": 230,
+        "color": "#f5f5f5"
+      },
+      {
+        "id": "n_1765664284762_3_qzk8",
+        "type": "box",
+        "label": "box",
+        "x": 540,
+        "y": 190,
+        "w": 210,
+        "h": 210,
+        "color": "#f5f5f5"
+      },
+      {
+        "id": "n_1765664284762_4_8stb",
+        "type": "box",
+        "label": "star",
+        "count": 1,
+        "x": 630,
+        "y": 280,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765664284762_5_y2o8",
+        "type": "box",
+        "label": "star",
+        "count": 1,
+        "x": 550,
+        "y": 260,
+        "w": 70,
+        "h": 80,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765664284762_6_ugb0",
+        "type": "box",
+        "label": "star",
+        "count": 1,
+        "x": 420,
+        "y": 270,
+        "w": 60,
+        "h": 90,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765664284762_7_xr3p",
+        "type": "box",
+        "label": "star",
+        "count": 1,
+        "x": 330,
+        "y": 280,
+        "w": 50,
+        "h": 70,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765664284762_8_50ao",
+        "type": "box",
+        "label": "star",
+        "count": 1,
+        "x": 160,
+        "y": 270,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765664284762_9_4jqx",
+        "type": "box",
+        "label": "star",
+        "count": 1,
+        "x": 20,
+        "y": 270,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      }
+    ],
+    "prompt": "There are 6 stars that need to be shared equally among 3 boxes. How many stars go in each box?",
+    "canvas_size": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "image_id": "ae9b02e8dcde7481",
+  "image_url": "/images/ae9b02e8dcde7481",
+  "tool": "Tool2LayoutPage",
+  "generation_time": "2025-12-13T22:21:00.023Z"
+}

@@ -71,7 +71,8 @@ export default function Tool2IntroPage() {
                                         preload="metadata"
                                         style={{ width: '100%', maxWidth: '800px', aspectRatio: '16/9' }}
                                     >
-                                        <source src="/videos/tool2-demo.mp4" type="video/mp4" />
+                                        <source src="/videos/Tool_B_Demo.mov" type="video/quicktime" />
+                                        <source src="/videos/Tool_B_Demo.mov" type="video/mp4" />
                                         Your browser does not support the video tag.
                                     </video>
                                 </div>

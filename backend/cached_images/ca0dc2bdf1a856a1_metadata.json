@@ -1,0 +1,97 @@
+{
+  "timestamp": "2025-12-13T23:14:25.363131",
+  "prompt": "There are 6 stars that need to be shared equally among 3 boxes. How many stars go in each box?\n\n=== LAYOUT SPECIFICATION (MUST FOLLOW EXACTLY) ===\n\nOBJECTS IN SCENE:\n1. 6 stars in 3 boxes: 6 stars in 3 boxes positioned at approximately 6% from left, 5% from top, wide shape\n2. box: box, object color: #f5f5f5 positioned at approximately 13% from left, 33% from top, wide shape\n3. star: star, object color: #fff9c4 positioned at approximately 26% from left, 35% from top, square shape\n4. star: star, object color: #fff9c4 positioned at approximately 14% from left, 36% from top, square shape\n5. star: star, object color: #fff9c4 positioned at approximately 10% from left, 15% from top, square shape\n6. star: star, object color: #fff9c4 positioned at approximately 25% from left, 15% from top, square shape\n7. star: star, object color: #fff9c4 positioned at approximately 49% from left, 42% from top, square shape\n8. star: star, object color: #fff9c4 positioned at approximately 49% from left, 23% from top, square shape\n\nSPATIAL RELATIONSHIPS:\n- star is contained inside box\n- star is contained inside box\n- box is contained inside star\n\n=== END LAYOUT SPECIFICATION ===\n\nFINAL INSTRUCTIONS:\nGenerate the visualization following this layout EXACTLY.\nPay special attention to object counts - they must be precise.\nCount each object type in your generated image and verify it matches the specification.\nIf you generate an image with incorrect counts, you have failed the task.\nThe accuracy of object counts is the most important aspect of this visualization.\n\nIMPORTANT COLOR INSTRUCTIONS:\n- Colors specified above (e.g., \"object color: #bbdefb\") refer ONLY to the objects themselves, NOT the background\n- Use a neutral, clean background (white, light gray, or transparent) - do NOT use object colors for the background\n- The background should be plain and unobtrusive to keep focus on the objects\n",
+  "layout_info": {
+    "nodes": [
+      {
+        "id": "n_1765663874113_0_ku4m",
+        "type": "text",
+        "label": "6 stars in 3 boxes",
+        "x": 50,
+        "y": 30,
+        "w": 300,
+        "h": 40,
+        "color": "#ffffff"
+      },
+      {
+        "id": "n_1765663874113_1_rjcd",
+        "type": "box",
+        "label": "box",
+        "x": 100,
+        "y": 200,
+        "w": 250,
+        "h": 170,
+        "color": "#f5f5f5"
+      },
+      {
+        "id": "n_1765663874113_2_x04e",
+        "type": "box",
+        "label": "star",
+        "x": 210,
+        "y": 210,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765663874113_3_zehl",
+        "type": "box",
+        "label": "star",
+        "x": 115,
+        "y": 215,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765663874113_4_rl8o",
+        "type": "box",
+        "label": "star",
+        "x": 80,
+        "y": 90,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765663874113_5_p34c",
+        "type": "box",
+        "label": "star",
+        "x": 200,
+        "y": 90,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765663874113_6_09nn",
+        "type": "box",
+        "label": "star",
+        "x": 390,
+        "y": 250,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      },
+      {
+        "id": "n_1765663874113_7_ffwp",
+        "type": "box",
+        "label": "star",
+        "x": 390,
+        "y": 140,
+        "w": 100,
+        "h": 100,
+        "color": "#fff9c4"
+      }
+    ],
+    "prompt": "There are 6 stars that need to be shared equally among 3 boxes. How many stars go in each box?",
+    "canvas_size": {
+      "width": 800,
+      "height": 600
+    }
+  },
+  "image_id": "ca0dc2bdf1a856a1",
+  "image_url": "/images/ca0dc2bdf1a856a1",
+  "tool": "Tool2LayoutPage",
+  "generation_time": "2025-12-13T22:13:56.225Z"
+}
