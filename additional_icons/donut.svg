@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Outer donut -->
+  <circle cx="50" cy="50" r="35" fill="#DEB887" stroke="#CD853F" stroke-width="3"/>
+  <!-- Inner hole -->
+  <circle cx="50" cy="50" r="18" fill="white"/>
+  <!-- Icing on top -->
+  <path d="M 20 50 Q 35 30, 50 30 Q 65 30, 80 50" fill="#FF69B4" stroke="#FF1493" stroke-width="2"/>
+  <!-- Sprinkles -->
+  <rect x="30" y="35" width="3" height="8" fill="#FF0000" transform="rotate(45 31.5 39)"/>
+  <rect x="60" y="38" width="3" height="8" fill="#00FF00" transform="rotate(-30 61.5 42)"/>
+  <rect x="45" y="32" width="3" height="8" fill="#0000FF" transform="rotate(60 46.5 36)"/>
+</svg>
+

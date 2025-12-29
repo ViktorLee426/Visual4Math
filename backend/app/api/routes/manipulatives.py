@@ -1,7 +1,7 @@
 # backend/app/api/routes/manipulatives.py
 from fastapi import APIRouter, HTTPException
 from app.schemas.manipulatives import ManipulativesRequest, ManipulativesResponse, ManipulativeElement
-from app.services.math2visual_service import generate_manipulatives_from_mwp, get_svg_dataset_path, get_additional_icons_path, read_svg_content
+from app.services.math2visual_service import generate_manipulatives_from_mwp, get_svg_dataset_path, get_additional_icons_path, get_my_icons_path, read_svg_content
 import logging
 import os
 
@@ -49,12 +49,41 @@ async def list_svg_icons():
             return {"icons": [], "error": f"Dataset not found at {dataset_path}"}
         
         icons = []
+        
+        # Load my_icons FIRST (essential icons for problems - always show these)
+        my_icons_path = get_my_icons_path()
+        if my_icons_path:
+            logger.info(f"📦 Loading my_icons from: {my_icons_path}")
+            my_icons_files = [f for f in sorted(os.listdir(my_icons_path)) if f.endswith('.svg')]
+            logger.info(f"📁 Found {len(my_icons_files)} my_icons SVG files")
+            
+            my_icons_count = 0
+            for filename in my_icons_files:
+                icon_name = filename[:-4]  # Remove .svg extension
+                svg_path = os.path.join(my_icons_path, filename)
+                
+                try:
+                    svg_content = read_svg_content(svg_path)
+                    if svg_content and len(svg_content.strip()) > 0:
+                        icons.append({
+                            "name": f"myicon-{icon_name}",  # Prefix to distinguish from other icons
+                            "svg_content": svg_content
+                        })
+                        my_icons_count += 1
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not read my_icon {filename}: {str(e)}")
+            
+            logger.info(f"✅ Loaded {my_icons_count} my_icons")
+        else:
+            logger.info("ℹ️ No my_icons directory found")
+        
+        # Then load math2visual dataset icons
         file_count = 0
         failed_count = 0
         
         # Get list of SVG files
         svg_files = [f for f in sorted(os.listdir(dataset_path)) if f.endswith('.svg')]
-        logger.info(f"📁 Found {len(svg_files)} SVG files in dataset")
+        logger.info(f"📁 Found {len(svg_files)} SVG files in math2visual dataset")
         
         for filename in svg_files:
             file_count += 1
@@ -80,7 +109,7 @@ async def list_svg_icons():
         if failed_count > 0:
             logger.warning(f"⚠️ Failed to read {failed_count} out of {file_count} SVG files")
         
-        logger.info(f"✅ Processed {file_count} SVG files from math2visual dataset, loaded {len(icons)} icons")
+        logger.info(f"✅ Processed {file_count} SVG files from math2visual dataset, loaded {len(icons)} total icons")
         
         # Also load additional icons (Heroicons, etc.)
         additional_path = get_additional_icons_path()

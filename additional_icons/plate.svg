@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Plate rim -->
+  <ellipse cx="50" cy="70" rx="35" ry="8" fill="#F5F5F5" stroke="#CCCCCC" stroke-width="2"/>
+  <!-- Plate base -->
+  <ellipse cx="50" cy="75" rx="30" ry="6" fill="#FFFFFF" stroke="#CCCCCC" stroke-width="1.5"/>
+  <!-- Plate center -->
+  <ellipse cx="50" cy="72" rx="25" ry="5" fill="#F8F8F8" stroke="#E0E0E0" stroke-width="1"/>
+</svg>
+

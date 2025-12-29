@@ -1,0 +1,74 @@
+{
+  "user_id": "visual4mathtest1",
+  "session_id": 3,
+  "start_time": "2025-12-29T00:30:45.293065",
+  "end_time": null,
+  "completed": false,
+  "tools": {
+    "tool_a": {
+      "images": [
+        {
+          "image_url": "/images/5ac7dee5481cb9d1",
+          "image_id": "5ac7dee5481cb9d1",
+          "image_filename": "5ac7dee5481cb9d1.png",
+          "user_input": "Elena has 4 balloons, and Nick has 2 balloons. How many do they have altogether?",
+          "operation": "addition",
+          "is_final": false,
+          "timestamp": "2025-12-29T00:31:28.767864",
+          "original_image_id": "5ac7dee5481cb9d1"
+        },
+        {
+          "image_url": "/images/a3d1353c9e3c29f4",
+          "image_id": "a3d1353c9e3c29f4",
+          "image_filename": "a3d1353c9e3c29f4.png",
+          "user_input": "make 7 balls here",
+          "operation": "addition",
+          "is_final": true,
+          "timestamp": "2025-12-29T00:34:10.709478",
+          "original_image_id": "a3d1353c9e3c29f4"
+        },
+        {
+          "image_url": "/images/2c323bb54c518b11",
+          "image_id": "2c323bb54c518b11",
+          "image_filename": "2c323bb54c518b11.png",
+          "user_input": "dont make this balck, make this color ful, and only 6 balls, now it is 7, make exactly 6",
+          "operation": "addition",
+          "is_final": true,
+          "timestamp": "2025-12-29T00:35:18.612323",
+          "original_image_id": "2c323bb54c518b11"
+        },
+        {
+          "image_url": "/images/a3d1353c9e3c29f4",
+          "image_id": "a3d1353c9e3c29f4",
+          "image_filename": "a3d1353c9e3c29f4.png",
+          "user_input": "make 7 balls here",
+          "operation": "addition",
+          "is_final": true,
+          "timestamp": "2025-12-29T00:35:21.339842",
+          "original_image_id": "a3d1353c9e3c29f4"
+        },
+        {
+          "image_url": "/images/5ac7dee5481cb9d1",
+          "image_id": "5ac7dee5481cb9d1",
+          "image_filename": "5ac7dee5481cb9d1.png",
+          "user_input": "Elena has 4 balloons, and Nick has 2 balloons. How many do they have altogether?",
+          "operation": "addition",
+          "is_final": true,
+          "timestamp": "2025-12-29T00:36:32.146355",
+          "original_image_id": "5ac7dee5481cb9d1"
+        }
+      ],
+      "evaluations": []
+    },
+    "tool_b": {
+      "layout_screenshots": [],
+      "images": [],
+      "evaluations": []
+    },
+    "tool_c": {
+      "canvas_states": [],
+      "images": [],
+      "evaluations": []
+    }
+  }
+}

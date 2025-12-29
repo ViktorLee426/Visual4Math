@@ -43,10 +43,10 @@ export default function Tool2IntroPage() {
                             <div className="space-y-1">
                                 <h2 className="text-base font-medium text-gray-900">What is this tool and how to use it?</h2>
                                 <p className="text-sm text-gray-700 leading-snug">
-                                    This tool allows you to create visualizations by arranging layout elements on a canvas. 
-                                    Paste or type a math word problem and click "Parse" to automatically extract visual elements, or manually add elements by clicking "Add Element". 
-                                    Drag elements to position them, resize by dragging corners, then click "Generate Image" to create the visualization. 
-                                    Use undo/redo to manage your changes.
+                                    This tool allows you to create images based on layouts that you draw. 
+                                    Type a math word problem and click "Generate Layout" to automatically generate a layout, or manually add elements by clicking the "Add Objects" or "Add Text" buttons. 
+                                    You can reposition elements resize them by dragging their corners. 
+                                    Once you're satisfied with your layout, click "Generate Image" to create the final image based on the layout you created. 
                                 </p>
                             </div>
                             

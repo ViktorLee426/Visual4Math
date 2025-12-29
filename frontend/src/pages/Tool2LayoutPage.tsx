@@ -7,6 +7,8 @@ import type { LayoutNode, LayoutCanvasRef } from '../components/layout/LayoutCan
 import { generateImageFromPromptStream } from '../services/imageApi';
 import { parseMathWordProblem, type LayoutItem } from '../services/parseApi';
 import { toolBProblems } from '../data/mathProblems';
+import { useTaskTimer } from '../contexts/TaskTimerContext';
+import { submitToolBLayout, submitToolBImage } from '../services/trackingApi';
 
 import { API_BASE_URL } from '../utils/apiConfig';
 
@@ -101,6 +103,9 @@ export default function Tool2LayoutPage() {
   const [currentProblem, setCurrentProblem] = useState<{ problemText: string; imageUrl: string } | null>(null);
   const layoutCanvasRef = useRef<LayoutCanvasRef>(null);
   
+  // Timer context
+  const { setStartTime } = useTaskTimer();
+  
   // Initialize phase
   useEffect(() => {
     const session = sessionManager.getParticipantData();
@@ -110,6 +115,14 @@ export default function Tool2LayoutPage() {
     } else {
       sessionManager.updatePhase('tool2-task');
     }
+
+    // Start timer when entering task page
+    setStartTime(Date.now());
+
+    // Cleanup: clear timer when leaving
+    return () => {
+      setStartTime(null);
+    };
     
     // Load selected problem if available, otherwise default to Subtraction
     const taskData = sessionManager.getPhaseData('tool2-task');
@@ -185,9 +198,19 @@ export default function Tool2LayoutPage() {
     return problem?.operation || '';
   };
   
-  // Handle selecting final output for a specific operation
+  // Handle selecting/unselecting final output for a specific operation
   const handleSelectFinalOutput = (imageUrl: string, operation: string) => {
-    const newFinalOutputs = { ...finalOutputSelected, [operation]: imageUrl };
+    const isCurrentlySelected = finalOutputSelected[operation] === imageUrl;
+    const newFinalOutputs = { ...finalOutputSelected };
+    
+    if (isCurrentlySelected) {
+      // Unselect: remove from final outputs
+      delete newFinalOutputs[operation];
+    } else {
+      // Select: set as final output for this operation
+      newFinalOutputs[operation] = imageUrl;
+    }
+    
     setFinalOutputSelected(newFinalOutputs);
     const taskData = sessionManager.getPhaseData('tool2-task') || {};
     sessionManager.savePhaseData('tool2-task', {
@@ -195,6 +218,20 @@ export default function Tool2LayoutPage() {
       final_outputs: newFinalOutputs,
       completion_status: Object.keys(newFinalOutputs).length > 0 ? 'completed' : 'in_progress'
     });
+    
+    // Track final image selection/unselection
+    const session = sessionManager.getParticipantData();
+    const sessionId = sessionStorage.getItem('tracking_session_id');
+    if (session && sessionId) {
+      submitToolBImage(
+        session.participantId,
+        parseInt(sessionId),
+        imageUrl,
+        undefined, // Layout screenshot ID not available here, that's ok
+        operation,
+        !isCurrentlySelected // is_final: true if selecting, false if unselecting
+      ).catch(err => console.error('Failed to track Tool B final image:', err));
+    }
   };
   
   // Initialize history when nodes change externally (e.g., from parse)
@@ -610,10 +647,29 @@ export default function Tool2LayoutPage() {
     try {
       // Capture canvas as PNG image
       let layoutImageDataUrl: string | null = null;
+      let layoutScreenshotId: number | undefined = undefined;
       if (layoutCanvasRef.current && nodes.length > 0) {
         try {
           layoutImageDataUrl = await layoutCanvasRef.current.exportAsPNG();
           console.log('Canvas exported as PNG, size:', layoutImageDataUrl.length, 'chars');
+          
+          // Track layout screenshot
+          const session = sessionManager.getParticipantData();
+          const sessionId = sessionStorage.getItem('tracking_session_id');
+          if (session && sessionId && layoutImageDataUrl) {
+            const operation = selectedProblemId ? getOperationFromProblemId(selectedProblemId) : undefined;
+            try {
+              const response = await submitToolBLayout(
+                session.participantId,
+                parseInt(sessionId),
+                layoutImageDataUrl,
+                operation
+              );
+              layoutScreenshotId = response.layout_id;
+            } catch (err) {
+              console.error('Failed to track Tool B layout:', err);
+            }
+          }
         } catch (error) {
           console.error('Failed to export canvas:', error);
           alert('Failed to capture canvas layout. Using text-only prompt.');
@@ -683,6 +739,21 @@ export default function Tool2LayoutPage() {
               nodes: nodes,
               prompt: prompt
             });
+            
+            // Track image generation
+            const session = sessionManager.getParticipantData();
+            const sessionId = sessionStorage.getItem('tracking_session_id');
+            if (session && sessionId) {
+              const operation = selectedProblemId ? getOperationFromProblemId(selectedProblemId) : undefined;
+              submitToolBImage(
+                session.participantId,
+                parseInt(sessionId),
+                fullUrl,
+                layoutScreenshotId,
+                operation,
+                false // not final yet
+              ).catch(err => console.error('Failed to track Tool B image:', err));
+            }
             
             return newHistory;
           });
@@ -841,7 +912,37 @@ export default function Tool2LayoutPage() {
 
             {/* Text Input Panel */}
             <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Text Input</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-500">Text Input</h3>
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      setPrompt(text);
+                    } catch (err) {
+                      console.error('Failed to paste:', err);
+                      // Fallback: try to read from clipboard using older API
+                      const textarea = document.createElement('textarea');
+                      document.body.appendChild(textarea);
+                      textarea.focus();
+                      document.execCommand('paste');
+                      const pastedText = textarea.value;
+                      document.body.removeChild(textarea);
+                      if (pastedText) {
+                        setPrompt(pastedText);
+                      }
+                    }
+                  }}
+                  className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                  title="Paste from clipboard"
+                  disabled={isParsing}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Paste
+                </button>
+              </div>
               <textarea
                 className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
                 placeholder="Enter the math word problem here in text..."
@@ -1021,10 +1122,12 @@ export default function Tool2LayoutPage() {
                       {/* Reverse order so oldest is first (top-left) */}
                       {[...generationHistory].reverse().map((it, idx) => {
                         const originalIdx = generationHistory.length - 1 - idx;
-                        // Check if this image is selected for any operation
+                        // Find which operation this image is selected for
+                        const normalizeUrl = (url: string) => url ? url.split('?')[0].split('#')[0] : '';
                         const selectedForOperation = Object.entries(finalOutputSelected).find(
-                          ([_, url]) => url === it.url
+                          ([_, url]) => normalizeUrl(url) === normalizeUrl(it.url)
                         )?.[0];
+                        const formatOp = (op: string) => op.charAt(0).toUpperCase() + op.slice(1);
                         
                         return (
                           <div 
@@ -1083,7 +1186,7 @@ export default function Tool2LayoutPage() {
                             )}
                             {selectedForOperation && (
                               <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded">
-                                ✓ {selectedForOperation.charAt(0).toUpperCase() + selectedForOperation.slice(1)}
+                                ✓ {formatOp(selectedForOperation)}
                               </div>
                             )}
                             {/* Show "Most Recent" badge on the newest image (originalIdx === 0 means newest) - only if no timer */}

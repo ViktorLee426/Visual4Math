@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Cupcake wrapper -->
+  <path d="M 30 60 L 25 85 L 75 85 L 70 60 Z" fill="#FFD700" stroke="#FFA500" stroke-width="2"/>
+  <path d="M 30 60 L 30 72.5 L 70 72.5 L 70 60" stroke="#FF8C00" stroke-width="1"/>
+  <!-- Cupcake base -->
+  <ellipse cx="50" cy="60" rx="20" ry="5" fill="#FFF8DC" stroke="#DEB887" stroke-width="1.5"/>
+  <!-- Frosting -->
+  <path d="M 30 60 Q 35 45, 40 50 Q 45 40, 50 45 Q 55 40, 60 50 Q 65 45, 70 60" fill="#FFB6C1" stroke="#FF69B4" stroke-width="2"/>
+  <!-- Cherry on top -->
+  <circle cx="50" cy="45" r="6" fill="#DC143C" stroke="#8B0000" stroke-width="1"/>
+  <path d="M 50 39 L 48 35 L 52 35 Z" fill="#228B22" stroke="#006400" stroke-width="0.5"/>
+</svg>
+

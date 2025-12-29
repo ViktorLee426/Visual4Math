@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { sessionManager } from '../utils/sessionManager';
 
 interface TimeProportionalProgressProps {
   currentPhase: string;
@@ -23,6 +24,15 @@ const phases = [
 export default function TimeProportionalProgress({ currentPhase }: TimeProportionalProgressProps) {
   const navigate = useNavigate();
   
+  // Check if user is authenticated (has valid session)
+  const isAuthenticated = () => {
+    const sessionId = sessionStorage.getItem('tracking_session_id');
+    const session = sessionManager.getParticipantData();
+    return !!(sessionId && session);
+  };
+  
+  const authenticated = isAuthenticated();
+  
   return (
     <div className="fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white border-r border-gray-200 z-20 w-56 overflow-y-auto">
       <div className="p-4">
@@ -44,9 +54,19 @@ export default function TimeProportionalProgress({ currentPhase }: TimeProportio
               phase.id === 'tool2-eval' || 
               phase.id === 'tool3-eval';
             
+            // Only allow navigation to Welcome page if not authenticated
+            // All other pages require authentication
+            const isDisabled = !authenticated && phase.id !== 'welcome';
+            
             const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
               e.preventDefault();
               e.stopPropagation();
+              
+              // Block navigation if not authenticated (except Welcome page)
+              if (isDisabled) {
+                return;
+              }
+              
               // Use window.location for more reliable navigation
               if (phase.path === '/') {
                 navigate('/', { replace: false });
@@ -60,9 +80,12 @@ export default function TimeProportionalProgress({ currentPhase }: TimeProportio
                 key={phase.id}
                 type="button"
                 onClick={handleClick}
+                disabled={isDisabled}
                 className={`w-full text-left px-4 py-3 rounded-lg transition-all duration-200 ${
                   isCurrent
                     ? 'bg-gray-900 text-white font-medium shadow-sm'
+                    : isDisabled
+                    ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
                     : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                 } ${needsSpacing ? 'mb-6' : 'mb-0.5'}`}
               >

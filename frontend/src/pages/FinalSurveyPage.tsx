@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sessionManager } from '../utils/sessionManager';
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
+import { endSession } from '../services/trackingApi';
 
 interface InterviewQuestion {
     id: string;
@@ -64,10 +65,21 @@ export default function FinalSurveyPage() {
         }
     }, []);
 
-    const handleComplete = () => {
+    const handleComplete = async () => {
         // Mark as completed
         sessionManager.savePhaseData('final-survey', { completed: true, timestamp: new Date().toISOString() });
         sessionManager.updatePhase('completion');
+        
+        // End tracking session
+        const session = sessionManager.getParticipantData();
+        const sessionId = sessionStorage.getItem('tracking_session_id');
+        if (session && sessionId) {
+            try {
+                await endSession(session.participantId, parseInt(sessionId));
+            } catch (err) {
+                console.error('Failed to end tracking session:', err);
+            }
+        }
         
         // Show completion message
         alert('Thank you for participating in the study! Your compensation will be sent to your email after we verify and analyze the recording.');

@@ -7,6 +7,8 @@ import type { ChatMessage, ImageRegion } from "../services/chatApi";
 import MarkdownText from "../components/MarkdownText";
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
 import ImageEditorModal from '../components/ImageEditorModal';
+import { useTaskTimer } from '../contexts/TaskTimerContext';
+import { submitToolAImage } from '../services/trackingApi';
 
 import { API_BASE_URL } from '../utils/apiConfig';
 
@@ -75,6 +77,9 @@ export default function Tool1ChatPage() {
         };
     }, [messages]);
 
+    // Timer context
+    const { setStartTime } = useTaskTimer();
+
     // Initialize task - load problems for Tool A
     // Run on mount and when component becomes visible again (e.g., returning from eval page)
     useEffect(() => {
@@ -85,6 +90,14 @@ export default function Tool1ChatPage() {
         } else {
             sessionManager.updatePhase('tool1-task');
         }
+
+        // Start timer when entering task page
+        setStartTime(Date.now());
+
+        // Cleanup: clear timer when leaving
+        return () => {
+            setStartTime(null);
+        };
 
         // Load conversation history directly from localStorage (simple and reliable)
         const CONVERSATION_KEY = 'tool1_conversation_history';
@@ -243,9 +256,19 @@ export default function Tool1ChatPage() {
         };
     }, [messages]);
     
-    // Handle selecting final output for a specific operation
+    // Handle selecting/unselecting final output for a specific operation
     const handleSelectFinalOutput = (imageUrl: string, operation: string) => {
-        const newFinalOutputs = { ...finalOutputSelected, [operation]: imageUrl };
+        const isCurrentlySelected = finalOutputSelected[operation] === imageUrl;
+        const newFinalOutputs = { ...finalOutputSelected };
+        
+        if (isCurrentlySelected) {
+            // Unselect: remove from final outputs
+            delete newFinalOutputs[operation];
+        } else {
+            // Select: set as final output for this operation
+            newFinalOutputs[operation] = imageUrl;
+        }
+        
         setFinalOutputSelected(newFinalOutputs);
         const taskData = sessionManager.getPhaseData('tool1-task') || {};
         sessionManager.savePhaseData('tool1-task', {
@@ -253,6 +276,24 @@ export default function Tool1ChatPage() {
             final_outputs: newFinalOutputs,
             completion_status: Object.keys(newFinalOutputs).length > 0 ? 'completed' : 'in_progress'
         });
+        
+        // Track final image selection/unselection
+        const session = sessionManager.getParticipantData();
+        const sessionId = sessionStorage.getItem('tracking_session_id');
+        if (session && sessionId) {
+            // Find the user input that generated this image
+            const message = messages.find(msg => msg.image_url === imageUrl);
+            const userInput = message ? messages[messages.indexOf(message) - 1]?.content : undefined;
+            
+            submitToolAImage(
+                session.participantId,
+                parseInt(sessionId),
+                imageUrl,
+                userInput,
+                operation,
+                !isCurrentlySelected // is_final: true if selecting, false if unselecting
+            ).catch(err => console.error('Failed to track Tool A final image:', err));
+        }
     };
     
     // Get operation name from problem ID
@@ -704,6 +745,21 @@ export default function Tool1ChatPage() {
                                 )
                             );
                         
+                        // Track image generation
+                        const session = sessionManager.getParticipantData();
+                        const sessionId = sessionStorage.getItem('tracking_session_id');
+                        if (session && sessionId) {
+                            const operation = problemData ? getOperationFromProblemId(problemData.problemId) : undefined;
+                            submitToolAImage(
+                                session.participantId,
+                                parseInt(sessionId),
+                                imageUrl,
+                                input, // user input
+                                operation,
+                                false // not final yet
+                            ).catch(err => console.error('Failed to track Tool A image:', err));
+                        }
+                        
                         // Auto-scroll to latest message when image generation completes
                         setTimeout(() => {
                             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1094,10 +1150,14 @@ export default function Tool1ChatPage() {
                                     <div className="flex-1 overflow-y-auto min-h-0">
                                         <div className="grid grid-cols-2 gap-2">
                                             {generatedImages.map((img, idx) => {
-                                                // Check if this image is selected for any operation
+                                                // Find which operation this image is selected for
+                                                const normalizeUrl = (url: string) => url.split('?')[0].split('#')[0];
                                                 const selectedForOperation = Object.entries(finalOutputSelected).find(
-                                                    ([_, url]) => url === img.url
+                                                    ([_, url]) => normalizeUrl(url) === normalizeUrl(img.url)
                                                 )?.[0];
+                                                
+                                                // Format operation name: "addition" -> "Addition"
+                                                const formatOp = (op: string) => op.charAt(0).toUpperCase() + op.slice(1);
                                                 
                                                 return (
                                                     <div 
@@ -1118,7 +1178,7 @@ export default function Tool1ChatPage() {
                                                         />
                                                         {selectedForOperation && (
                                                             <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded">
-                                                                ✓ {selectedForOperation.charAt(0).toUpperCase() + selectedForOperation.slice(1)}
+                                                                ✓ {formatOp(selectedForOperation)}
                                                             </div>
                                                         )}
                                                     </div>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Ice cream cone -->
+  <path d="M50 75 L35 95 L65 95 Z" fill="#D4A574" stroke="#8B6F47" stroke-width="2"/>
+  <!-- Pink ice cream scoop -->
+  <ellipse cx="50" cy="60" rx="20" ry="18" fill="#FFB6C1" stroke="#FF69B4" stroke-width="2"/>
+  <!-- Strawberry on top -->
+  <ellipse cx="50" cy="45" rx="12" ry="10" fill="#FF1493" stroke="#C71585" stroke-width="1.5"/>
+  <path d="M50 35 L48 40 L52 40 Z" fill="#228B22" stroke="#006400" stroke-width="1"/>
+</svg>
+

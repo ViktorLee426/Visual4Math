@@ -1,11 +1,36 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
+import { authenticateUser } from '../services/trackingApi';
+import { sessionManager } from '../utils/sessionManager';
 
 export default function WelcomePage() {
     const navigate = useNavigate();
+    const [userId, setUserId] = useState('');
+    const [error, setError] = useState('');
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-    const handleContinue = () => {
-        navigate('/instructions');
+    const handleContinue = async () => {
+        if (!userId.trim()) {
+            setError('Please enter your user ID');
+            return;
+        }
+
+        setIsAuthenticating(true);
+        setError('');
+
+        try {
+            const response = await authenticateUser(userId.trim());
+            // Store session info in sessionManager
+            sessionManager.initializeParticipant(userId.trim());
+            // Store session_id in sessionStorage for tracking
+            sessionStorage.setItem('tracking_session_id', response.session_id.toString());
+            navigate('/instructions');
+        } catch (err: any) {
+            setError(err.message || 'Authentication failed. Please check your user ID.');
+        } finally {
+            setIsAuthenticating(false);
+        }
     };
 
     return (
@@ -68,13 +93,40 @@ export default function WelcomePage() {
                         </div>
                     </div>
                     
+                    {/* User ID Input */}
+                    <div className="bg-white rounded-lg p-6 border border-gray-200">
+                        <h2 className="text-lg font-medium text-gray-900 mb-3 text-center">Enter Your User ID</h2>
+                        <div className="space-y-3">
+                            <input
+                                type="text"
+                                value={userId}
+                                onChange={(e) => {
+                                    setUserId(e.target.value);
+                                    setError('');
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleContinue();
+                                    }
+                                }}
+                                placeholder="Please enter your user ID"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent text-base"
+                                disabled={isAuthenticating}
+                            />
+                            {error && (
+                                <p className="text-sm text-red-600 text-center">{error}</p>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Continue button */}
                     <div className="space-y-4">
                         <button
                             onClick={handleContinue}
-                            className="w-full bg-gray-900 text-white py-4 px-6 rounded-lg hover:bg-gray-800 transition-colors text-base font-medium"
+                            disabled={isAuthenticating}
+                            className="w-full bg-gray-900 text-white py-4 px-6 rounded-lg hover:bg-gray-800 transition-colors text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            Continue to Instructions →
+                            {isAuthenticating ? 'Authenticating...' : 'Continue to Instructions →'}
                         </button>
                         
                         <p className="text-xs text-gray-500 text-center">

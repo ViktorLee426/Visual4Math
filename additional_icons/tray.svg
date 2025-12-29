@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Tray base -->
+  <rect x="15" y="70" width="70" height="8" rx="2" fill="#8B7355" stroke="#654321" stroke-width="2"/>
+  <!-- Tray rim left -->
+  <rect x="15" y="60" width="4" height="10" rx="1" fill="#A0826D" stroke="#654321" stroke-width="1"/>
+  <!-- Tray rim right -->
+  <rect x="81" y="60" width="4" height="10" rx="1" fill="#A0826D" stroke="#654321" stroke-width="1"/>
+  <!-- Tray handle left -->
+  <path d="M 19 60 Q 10 55, 10 50 Q 10 45, 19 40" fill="none" stroke="#654321" stroke-width="3" stroke-linecap="round"/>
+  <!-- Tray handle right -->
+  <path d="M 81 60 Q 90 55, 90 50 Q 90 45, 81 40" fill="none" stroke="#654321" stroke-width="3" stroke-linecap="round"/>
+  <!-- Tray interior -->
+  <rect x="19" y="62" width="62" height="4" rx="1" fill="#D4A574" stroke="#8B6F47" stroke-width="1"/>
+</svg>
+

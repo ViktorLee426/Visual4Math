@@ -43,10 +43,11 @@ export default function Tool3IntroPage() {
                             <div className="space-y-1">
                                 <h2 className="text-base font-medium text-gray-900">What is this tool and how to use it?</h2>
                                 <p className="text-sm text-gray-700 leading-snug">
-                                    This tool provides a free-form canvas where you can place and manipulate visual elements. 
-                                    Click "Add Icon" to browse and add mathematical manipulatives, or "Add Text" to add text labels. 
-                                    Drag elements to position them, select to resize or rotate, use zoom and pan to navigate, and take snapshots to save your progress. 
-                                    Use undo/redo to manage your changes.
+                                    This tool provides a free-form canvas where you can create mathematical visualizations by placing and manipulating visual elements. 
+                                    You can either use AI assistance to generate a starting visualization from a math word problem, or build your visualization manually from scratch. 
+                                    Add icons and text boxes to your canvas, then drag and resize them to create your desired layout. 
+                                    When you're satisfied with your visualization, save it as an image. 
+                                    You can create multiple visualizations and experiment freely with different arrangements.
                                 </p>
                             </div>
                             
@@ -66,13 +67,19 @@ export default function Tool3IntroPage() {
                                 <h2 className="text-base font-medium text-gray-900 text-center">Demo Video</h2>
                                 <div className="w-full flex justify-center">
                                     <video 
-                                        className="rounded-lg shadow-lg" 
+                                        className="rounded-lg shadow-lg bg-gray-100" 
                                         controls
                                         preload="metadata"
+                                        playsInline
                                         style={{ width: '100%', maxWidth: '800px', aspectRatio: '16/9' }}
+                                        onError={(e) => {
+                                            console.error('Video loading error:', e);
+                                        }}
                                     >
-                                        <source src="/videos/tool3-demo.mp4" type="video/mp4" />
-                                        Your browser does not support the video tag.
+                                        <source src="/videos/Tool_C_Demo.mov" type="video/quicktime" />
+                                        <source src="/videos/Tool_C_Demo.mov" type="video/mp4" />
+                                        Your browser does not support the video tag. Please try opening the video directly: 
+                                        <a href="/videos/Tool_C_Demo.mov" className="text-blue-600 underline ml-1" target="_blank" rel="noopener noreferrer">Open Video</a>
                                     </video>
                                 </div>
                             </div>

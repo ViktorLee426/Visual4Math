@@ -50,6 +50,7 @@ export default function ImageEditorModal({
   const [isDrawing, setIsDrawing] = useState(false);
   const brushSize = 20; // Reduced brush size for better precision
   const [selectedHistoryImage, setSelectedHistoryImage] = useState<string>(imageUrl);
+  const [showHistorySidebar, setShowHistorySidebar] = useState(true); // Control sidebar visibility
 
   // Filter images from history and remove duplicates based on image_url
   const seenUrls = new Set<string>();
@@ -86,6 +87,7 @@ export default function ImageEditorModal({
             // Clear mask canvas (start with all black - nothing selected)
             const maskCtx = maskCanvas.getContext('2d');
             if (maskCtx) {
+                // Completely clear and reset mask canvas
                 maskCtx.fillStyle = 'black';
                 maskCtx.fillRect(0, 0, width, height);
                 maskCtx.globalCompositeOperation = 'lighten'; // Set default composite operation
@@ -96,8 +98,6 @@ export default function ImageEditorModal({
             if (overlayCtx) {
                 overlayCtx.clearRect(0, 0, width, height);
             }
-            
-            // Update canvas display size after image loads (handled by useEffect)
             
             // Reset brush history when image changes
             setBrushHistory([]);
@@ -265,13 +265,14 @@ export default function ImageEditorModal({
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isPainting) return;
     setIsDrawing(true);
-    // Save state for undo
+    // Save current state BEFORE starting new brush stroke for undo
     const maskCanvas = maskCanvasRef.current;
     if (maskCanvas) {
+      // Get the current mask state as a clean snapshot
       const maskData = maskCanvas.toDataURL('image/png');
       setBrushHistory(prev => [...prev, maskData]);
     }
-    // Reset composite operation for new stroke
+    // Ensure composite operation is set correctly for new stroke
     const maskCtx = maskCanvas?.getContext('2d');
     if (maskCtx) {
       maskCtx.globalCompositeOperation = 'lighten'; // Prevents darkening
@@ -302,37 +303,47 @@ export default function ImageEditorModal({
     const maskCanvas = maskCanvasRef.current;
     if (!overlayCanvas || !maskCanvas) return;
 
-    // Remove last history item
+    // Remove last history item (the state saved before the last brush stroke)
     const newHistory = [...brushHistory];
     newHistory.pop();
     setBrushHistory(newHistory);
 
-    // Restore previous mask state
+    // Restore the mask to the exact previous state
     if (newHistory.length > 0) {
       const prevMask = newHistory[newHistory.length - 1];
       const img = new Image();
       img.onload = () => {
         const maskCtx = maskCanvas.getContext('2d');
         if (maskCtx) {
-          // Clear and restore mask
-          maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+          // First, completely clear the mask canvas by filling with black
+          maskCtx.globalCompositeOperation = 'source-over';
+          maskCtx.fillStyle = 'black';
+          maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+          
+          // Now draw the previous mask image on top (this replaces everything)
           maskCtx.drawImage(img, 0, 0, maskCanvas.width, maskCanvas.height);
-          maskCtx.globalCompositeOperation = 'lighten'; // Reset composite operation
+          
+          // Reset to 'lighten' for future brush strokes
+          maskCtx.globalCompositeOperation = 'lighten';
         }
-        // Redraw overlay using the new system
+        // Update overlay to reflect the restored mask
         redrawOverlay();
+        // Update current mask state to match the restored canvas
         const maskData = maskCanvas.toDataURL('image/png');
         setCurrentMask(maskData);
       };
       img.src = prevMask;
     } else {
-      // Clear everything
+      // No history left - clear everything completely
       const maskCtx = maskCanvas.getContext('2d');
       const overlayCtx = overlayCanvas.getContext('2d');
       if (maskCtx && overlayCtx) {
+        // Completely clear mask canvas (black = nothing selected)
+        maskCtx.globalCompositeOperation = 'source-over';
         maskCtx.fillStyle = 'black';
         maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-        maskCtx.globalCompositeOperation = 'lighten'; // Reset composite operation
+        maskCtx.globalCompositeOperation = 'lighten';
+        // Clear overlay
         overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       }
       setCurrentMask(null);
@@ -441,8 +452,8 @@ export default function ImageEditorModal({
           </button>
         </div>
 
-        {/* Image Display Area */}
-        <div className="flex-1 flex items-center justify-center p-8 overflow-auto bg-white">
+        {/* Image Display Area - Full screen when history is hidden */}
+        <div className={`flex-1 flex items-center justify-center overflow-auto bg-white ${showHistorySidebar ? 'p-8' : 'p-4'}`}>
           <div className="relative inline-block">
             <img
               ref={imageRef}
@@ -451,7 +462,7 @@ export default function ImageEditorModal({
               className="block"
               style={{ 
                 maxWidth: '100%', 
-                maxHeight: 'calc(100vh - 200px)',
+                maxHeight: showHistorySidebar ? 'calc(100vh - 200px)' : 'calc(100vh - 120px)',
                 width: 'auto',
                 height: 'auto',
                 display: 'block'
@@ -528,8 +539,8 @@ export default function ImageEditorModal({
         </div>
       </div>
 
-      {/* Image History Sidebar - Smaller */}
-      {historyImages.length > 1 && (
+      {/* Image History Sidebar - Hidden when showHistorySidebar is false */}
+      {historyImages.length > 1 && showHistorySidebar && (
         <div className="w-48 bg-gray-50 border-l border-gray-200 overflow-y-auto">
           <div className="p-3">
             <h3 className="text-xs font-semibold text-gray-700 mb-2">History</h3>
@@ -537,7 +548,10 @@ export default function ImageEditorModal({
               {historyImages.map((img, index) => (
                 <button
                   key={img.id || index}
-                  onClick={() => setSelectedHistoryImage(img.url)}
+                  onClick={() => {
+                    setSelectedHistoryImage(img.url);
+                    setShowHistorySidebar(false); // Hide sidebar when clicking history item
+                  }}
                   className={`w-full p-1.5 rounded border-2 transition-colors ${
                     selectedHistoryImage === img.url
                       ? 'border-blue-500 bg-blue-50'

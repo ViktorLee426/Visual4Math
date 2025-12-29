@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Ice cream cone -->
+  <path d="M50 75 L35 95 L65 95 Z" fill="#D4A574" stroke="#8B6F47" stroke-width="2"/>
+  <!-- Brown chocolate ice cream scoop -->
+  <ellipse cx="50" cy="60" rx="20" ry="18" fill="#8B4513" stroke="#654321" stroke-width="2"/>
+  <!-- Chocolate chips -->
+  <ellipse cx="45" cy="55" rx="3" ry="3" fill="#3D2817"/>
+  <ellipse cx="55" cy="58" rx="3" ry="3" fill="#3D2817"/>
+  <ellipse cx="50" cy="62" rx="3" ry="3" fill="#3D2817"/>
+</svg>
+

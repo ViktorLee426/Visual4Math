@@ -6,6 +6,95 @@ import { useEffect, useRef, useState } from 'react';
 import { toolCProblems } from '../data/mathProblems';
 import PageNavigation from '../components/PageNavigation';
 import { generateManipulatives, getSvgIcons, type SvgIcon } from '../services/manipulativesApi';
+import { useTaskTimer } from '../contexts/TaskTimerContext';
+import { submitToolCCanvas, submitToolCImage } from '../services/trackingApi';
+
+// Helper function to wrap text based on available width
+const wrapText = (text: string, maxWidth: number, fontSize: number, textPadding: number = 4): string[] => {
+  if (!text) return [''];
+  
+  // First split by manual line breaks
+  const manualLines = text.split('\n');
+  const wrappedLines: string[] = [];
+  
+  // Character width estimation (similar to Tool2LayoutPage)
+  const charWidth = fontSize * 0.55;
+  const availableWidth = maxWidth - (textPadding * 2);
+  const maxChars = Math.max(4, Math.floor(availableWidth / charWidth));
+  
+  for (const manualLine of manualLines) {
+    if (!manualLine.trim()) {
+      wrappedLines.push('');
+      continue;
+    }
+    
+    const words = manualLine.split(/\s+/);
+    let currentLine = '';
+    
+    for (const word of words) {
+      const testLine = currentLine ? currentLine + ' ' + word : word;
+      
+      // If adding this word would exceed the width, start a new line
+      if (testLine.length > maxChars && currentLine) {
+        wrappedLines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    
+    if (currentLine) {
+      wrappedLines.push(currentLine);
+    }
+  }
+  
+  return wrappedLines.length > 0 ? wrappedLines : [''];
+};
+
+// Predefined color palette - R default palette
+const COLOR_PALETTE = [
+  '#000000', // Black
+  '#DF536B', // Pink/Red
+  '#61D04F', // Green
+  '#2297E6', // Blue
+  '#28E2E5', // Cyan
+  '#CD0BBC', // Magenta/Purple
+  '#F5C710', // Yellow/Orange
+  '#9E9E9E', // Gray
+  '#FFFFFF', // White
+];
+
+// Color picker button component with lab tube icon
+function ColorPickerButton({ value, onChange }: { value: string; onChange: (color: string) => void }) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleClick = () => {
+    inputRef.current?.click();
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={handleClick}
+        className="w-5 h-5 rounded border border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white relative"
+        title="Color picker"
+        type="button"
+      >
+        <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+      </button>
+      <input
+        ref={inputRef}
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        style={{ zIndex: 1 }}
+      />
+    </div>
+  );
+}
 
 type Elem = { 
   id: string; 
@@ -19,16 +108,17 @@ type Elem = {
   fontSize?: number;
   fontFamily?: string;
   textColor?: string;
+  iconColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
 };
 
 export default function Tool3PanelPage() {
   const navigate = useNavigate();
   const [elems, setElems] = useState<Elem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // zoom/pan
+  // zoom (pan removed)
   const [scale, setScale] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [panning, setPanning] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   // undo/redo
   const [undoStack, setUndoStack] = useState<Elem[][]>([]);
@@ -37,6 +127,7 @@ export default function Tool3PanelPage() {
   const [snapshots, setSnapshots] = useState<{ url:string; ts:number }[]>([]);
   const [svgIcons, setSvgIcons] = useState<SvgIcon[]>([]);
   const [iconsLoading, setIconsLoading] = useState(true);
+  const [iconSearchQuery, setIconSearchQuery] = useState('');
   const [problemText, setProblemText] = useState('');
   const [viewingImageIndex, setViewingImageIndex] = useState<number | null>(null);
   const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
@@ -47,6 +138,9 @@ export default function Tool3PanelPage() {
   const [textFontFamily, setTextFontFamily] = useState('Arial');
   const [textColor, setTextColor] = useState('#000000');
   
+  // Timer context
+  const { setStartTime } = useTaskTimer();
+  
   // Initialize phase
   useEffect(() => {
     const session = sessionManager.getParticipantData();
@@ -56,6 +150,14 @@ export default function Tool3PanelPage() {
     } else {
       sessionManager.updatePhase('tool3-task');
     }
+
+    // Start timer when entering task page
+    setStartTime(Date.now());
+
+    // Cleanup: clear timer when leaving
+    return () => {
+      setStartTime(null);
+    };
 
     // Load selected problem if available, otherwise default to Multiplication
     const taskData = sessionManager.getPhaseData('tool3-task');
@@ -127,10 +229,89 @@ export default function Tool3PanelPage() {
     const problem = toolCProblems.find(p => p.id === problemId);
     return problem?.operation || '';
   };
+
+  // Clean icon display name: remove myicon- prefix and trailing -number patterns
+  const getIconDisplayName = (iconName: string): string => {
+    // Remove myicon- or heroicon- prefix
+    let displayName = iconName.replace(/^(myicon-|heroicon-)/, '');
+    // Remove trailing -number pattern (e.g., "donut-2" -> "donut")
+    displayName = displayName.replace(/-\d+$/, '');
+    return displayName;
+  };
+
+  // Get default icon keywords based on operation
+  const getDefaultIconKeywords = (operation: string): string[] => {
+    const keywords: Record<string, string[]> = {
+      'addition': ['myicon-strawberry', 'myicon-chocolate', 'myicon-ice-cream', 'myicon-add', 'myicon-addition', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
+      'subtraction': ['myicon-donut', 'myicon-plate', 'myicon-boy', 'myicon-ate', 'myicon-subtract', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
+      'multiplication': ['myicon-cupcake', 'myicon-tray', 'myicon-multiply', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
+      'division': ['myicon-cupcake', 'myicon-plate', 'myicon-divide', 'myicon-division', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
+    };
+    return keywords[operation] || [];
+  };
+
+  // Filter icons to show: all my_icons + operation-specific icons + search matches
+  const getFilteredIcons = (): SvgIcon[] => {
+    if (svgIcons.length === 0) {
+      return svgIcons;
+    }
+
+    const searchQuery = iconSearchQuery.toLowerCase().trim();
+
+    // If searching, show all matching icons
+    if (searchQuery) {
+      return svgIcons.filter(icon => 
+        icon.name.toLowerCase().includes(searchQuery)
+      );
+    }
+
+    // Otherwise, show: all my_icons + operation-specific icons + some common icons
+    const myIcons = svgIcons.filter(icon => icon.name.startsWith('myicon-'));
+    
+    // If no problem selected, just show my_icons + some common ones
+    if (!selectedProblemId) {
+      const commonIcons = svgIcons
+        .filter(icon => !icon.name.startsWith('myicon-') && !icon.name.startsWith('heroicon-'))
+        .slice(0, 20);
+      return [...myIcons, ...commonIcons];
+    }
+
+    const operation = getOperationFromProblemId(selectedProblemId);
+    const defaultKeywords = getDefaultIconKeywords(operation);
+    
+    // Get operation-specific icons (these might overlap with myIcons, but that's fine)
+    const defaultIcons = svgIcons.filter(icon => 
+      defaultKeywords.some(keyword => icon.name.toLowerCase().includes(keyword.toLowerCase()))
+    );
+    
+    // Add some common icons from other datasets (limit to 20)
+    const commonIcons = svgIcons
+      .filter(icon => !icon.name.startsWith('myicon-') && !icon.name.startsWith('heroicon-'))
+      .slice(0, 20);
+
+    // Combine: all my_icons first, then operation-specific, then common
+    // Remove duplicates (keep first occurrence)
+    const combined = [...myIcons, ...defaultIcons, ...commonIcons];
+    const unique = combined.filter((icon, index, self) => 
+      index === self.findIndex(i => i.name === icon.name)
+    );
+    
+    return unique;
+  };
   
-  // Handle selecting final output for a specific operation
+  // Handle selecting/unselecting final output for a specific operation
   const handleSelectFinalOutput = (imageUrl: string, operation: string) => {
-    const newFinalOutputs = { ...finalOutputSelected, [operation]: imageUrl };
+    const isCurrentlySelected = finalOutputSelected[operation] === imageUrl;
+    const newFinalOutputs = { ...finalOutputSelected };
+    
+    if (isCurrentlySelected) {
+      // Unselect: remove from final outputs
+      delete newFinalOutputs[operation];
+    } else {
+      // Select: set as final output for this operation
+      newFinalOutputs[operation] = imageUrl;
+    }
+    
     setFinalOutputSelected(newFinalOutputs);
     const taskData = sessionManager.getPhaseData('tool3-task') || {};
     sessionManager.savePhaseData('tool3-task', {
@@ -138,6 +319,19 @@ export default function Tool3PanelPage() {
       final_outputs: newFinalOutputs,
       completion_status: Object.keys(newFinalOutputs).length > 0 ? 'completed' : 'in_progress'
     });
+    
+    // Track final image selection/unselection
+    const session = sessionManager.getParticipantData();
+    const sessionId = sessionStorage.getItem('tracking_session_id');
+    if (session && sessionId) {
+      submitToolCImage(
+        session.participantId,
+        parseInt(sessionId),
+        imageUrl,
+        operation,
+        !isCurrentlySelected // is_final: true if selecting, false if unselecting
+      ).catch(err => console.error('Failed to track Tool C final image:', err));
+    }
   };
 
   const pushHistory = (prev: Elem[]) => {
@@ -157,7 +351,9 @@ export default function Tool3PanelPage() {
       text: 'Text',
       fontSize: textFontSize,
       fontFamily: textFontFamily,
-      textColor: textColor
+      textColor: textColor,
+      borderColor: '#cccccc',
+      borderWidth: 1
     }]);
   };
   const addIcon = (svg: string) => {
@@ -171,7 +367,9 @@ export default function Tool3PanelPage() {
     setElems([...elems, { id, kind: 'icon', x, y, w: 80, h: 80, svg }]);
   };
 
-  const onDrag = (id: string, dx: number, dy: number) => setElems(elems.map(e => e.id===id ? { ...e, x: e.x + dx/scale, y: e.y + dy/scale } : e));
+  const onDrag = (id: string, dx: number, dy: number) => {
+    setElems(prevElems => prevElems.map(e => e.id===id ? { ...e, x: e.x + dx, y: e.y + dy } : e));
+  };
   const onResize = (id: string, dx: number, dy: number, corner: 'nw'|'ne'|'sw'|'se') => {
     setElems(elems.map(e => {
       if (e.id !== id) return e;
@@ -202,6 +400,26 @@ export default function Tool3PanelPage() {
       
       return { ...e, x: newX, y: newY, w: newW, h: newH };
     }));
+  };
+
+  // Function to modify SVG colors
+  const modifySvgColor = (svgString: string, newColor: string): string => {
+    // Replace all fill attributes with the new color
+    let modified = svgString;
+    
+    // Replace fill="#..." patterns
+    modified = modified.replace(/fill="#[^"]*"/g, `fill="${newColor}"`);
+    
+    // Replace fill="rgb(...)" patterns
+    modified = modified.replace(/fill="rgb\([^)]*\)"/g, `fill="${newColor}"`);
+    
+    // Replace fill="rgba(...)" patterns
+    modified = modified.replace(/fill="rgba\([^)]*\)"/g, `fill="${newColor}"`);
+    
+    // Also handle stroke colors if needed
+    modified = modified.replace(/stroke="#[^"]*"/g, `stroke="${newColor}"`);
+    
+    return modified;
   };
 
   const [isParsing, setIsParsing] = useState(false);
@@ -454,10 +672,14 @@ export default function Tool3PanelPage() {
       }
     });
 
-    // Add padding (20% on each side, minimum 40px)
-    const padding = Math.max(40, Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2));
+    // Calculate content dimensions
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
+    
+    // Add minimal padding (5% on each side, minimum 15px) - just enough to cover elements
+    const padding = Math.max(15, Math.max(contentWidth * 0.05, contentHeight * 0.05));
+    
+    // Use rectangular canvas with natural aspect ratio
     const canvasWidth = contentWidth + padding * 2;
     const canvasHeight = contentHeight + padding * 2;
 
@@ -465,7 +687,7 @@ export default function Tool3PanelPage() {
     const offsetX = padding - minX;
     const offsetY = padding - minY;
 
-    // Create SVG with calculated dimensions
+    // Create SVG with rectangular dimensions (preserving aspect ratio)
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     svg.setAttribute('width', String(Math.ceil(canvasWidth)));
@@ -486,28 +708,44 @@ export default function Tool3PanelPage() {
         const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         r.setAttribute('x', String(e.x-4)); r.setAttribute('y', String(e.y-16));
         r.setAttribute('width', String(e.w)); r.setAttribute('height', String(e.h));
-        r.setAttribute('rx', '6'); r.setAttribute('fill', 'white'); r.setAttribute('stroke', '#ccc');
+        r.setAttribute('rx', '6'); 
+        r.setAttribute('fill', 'white'); 
+        r.setAttribute('fill-opacity', '0.8');
+        r.setAttribute('stroke', e.borderColor || '#cccccc');
+        r.setAttribute('stroke-width', String(e.borderWidth ?? 1));
         g.appendChild(r);
         const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         const fontSize = e.fontSize || 14;
         const boxTop = e.y - 16;
         const textPadding = 4;
         const textStartY = boxTop + textPadding + fontSize; // Match the rendering logic
-        t.setAttribute('x', String(e.x)); 
+        t.setAttribute('x', String(e.x + e.w/2)); 
         t.setAttribute('y', String(textStartY));
         t.setAttribute('font-size', String(fontSize)); 
         t.setAttribute('font-family', e.fontFamily || 'Arial');
         t.setAttribute('fill', e.textColor || '#000000');
-        const textLines = (e.text || '').split('\n');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('dominant-baseline', 'hanging');
+        
+        // Apply word wrapping using the same logic as display
+        const textLines = wrapText(e.text || '', e.w, fontSize, textPadding);
         const lineHeight = fontSize * 1.2;
         textLines.forEach((line, idx) => {
           const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-          tspan.setAttribute('x', String(e.x));
+          tspan.setAttribute('x', String(e.x + e.w/2));
           tspan.setAttribute('dy', idx === 0 ? '0' : String(lineHeight));
           tspan.textContent = line || '\u00A0'; // Use non-breaking space for empty lines
           t.appendChild(tspan);
         });
         g.appendChild(t);
+        
+        // Update border color and width if specified
+        if (e.borderColor) {
+          r.setAttribute('stroke', e.borderColor);
+        }
+        if (e.borderWidth !== undefined) {
+          r.setAttribute('stroke-width', String(e.borderWidth));
+        }
       }
     });
     
@@ -603,7 +841,37 @@ export default function Tool3PanelPage() {
 
             {/* Text Input Panel */}
             <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Text Input</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-500">Text Input</h3>
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      setProblemText(text);
+                    } catch (err) {
+                      console.error('Failed to paste:', err);
+                      // Fallback: try to read from clipboard using older API
+                      const textarea = document.createElement('textarea');
+                      document.body.appendChild(textarea);
+                      textarea.focus();
+                      document.execCommand('paste');
+                      const pastedText = textarea.value;
+                      document.body.removeChild(textarea);
+                      if (pastedText) {
+                        setProblemText(pastedText);
+                      }
+                    }
+                  }}
+                  className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                  title="Paste from clipboard"
+                  disabled={isParsing}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Paste
+                </button>
+              </div>
               <textarea 
                 id="t3-prompt" 
                 className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none" 
@@ -635,137 +903,14 @@ export default function Tool3PanelPage() {
                 {isParsing ? (
                   <>
                     <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                    <span>Parsing...</span>
+                    <span>Generating...</span>
                   </>
                 ) : (
-                  'Parse'
+                  'Generate AI Suggestion'
                 )}
               </button>
             </div>
 
-            {/* Text Properties Panel */}
-            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-              <h4 className="text-xs font-medium text-gray-700 mb-2">Text Properties</h4>
-              {selectedId && elems.find(e => e.id === selectedId && e.kind === 'text') ? (
-                // Show properties for selected text element
-                (() => {
-                  const selectedText = elems.find(e => e.id === selectedId && e.kind === 'text');
-                  const currentFontSize = selectedText?.fontSize || 14;
-                  const currentFontFamily = selectedText?.fontFamily || 'Arial';
-                  const currentTextColor = selectedText?.textColor || '#000000';
-                  
-                  return (
-                    <div className="space-y-2">
-                      {/* Font Size - compact row */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-600 w-16">Font Size:</label>
-                        <input
-                          type="number"
-                          min="8"
-                          max="72"
-                          value={currentFontSize}
-                          onChange={(e) => {
-                            const newSize = Number(e.target.value);
-                            setElems(prev => prev.map(it => 
-                              it.id === selectedId ? { ...it, fontSize: newSize } : it
-                            ));
-                          }}
-                          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                        />
-                      </div>
-                      
-                      {/* Font Family - compact row */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-600 w-16">Font:</label>
-                        <select
-                          value={currentFontFamily}
-                          onChange={(e) => {
-                            setElems(prev => prev.map(it => 
-                              it.id === selectedId ? { ...it, fontFamily: e.target.value } : it
-                            ));
-                          }}
-                          className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                        >
-                          <option value="Arial">Arial</option>
-                          <option value="Times New Roman">Times New Roman</option>
-                          <option value="Courier New">Courier New</option>
-                          <option value="Verdana">Verdana</option>
-                          <option value="Georgia">Georgia</option>
-                          <option value="Comic Sans MS">Comic Sans MS</option>
-                        </select>
-                      </div>
-                      
-                      {/* Text Color - compact row */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-600 w-16">Color:</label>
-                        <input
-                          type="color"
-                          value={currentTextColor}
-                          onChange={(e) => {
-                            setElems(prev => prev.map(it => 
-                              it.id === selectedId ? { ...it, textColor: e.target.value } : it
-                            ));
-                          }}
-                          className="w-16 h-8 border border-gray-300 rounded cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  );
-                })()
-              ) : (
-                // Show default properties for new text boxes
-                <div className="space-y-2">
-                  {/* Font Size - compact row */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-600 w-16">Font Size:</label>
-                    <input
-                      type="number"
-                      min="8"
-                      max="72"
-                      value={textFontSize}
-                      onChange={(e) => setTextFontSize(Number(e.target.value))}
-                      className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                    />
-                  </div>
-                  
-                  {/* Font Family - compact row */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-600 w-16">Font:</label>
-                    <select
-                      value={textFontFamily}
-                      onChange={(e) => setTextFontFamily(e.target.value)}
-                      className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                    >
-                      <option value="Arial">Arial</option>
-                      <option value="Times New Roman">Times New Roman</option>
-                      <option value="Courier New">Courier New</option>
-                      <option value="Verdana">Verdana</option>
-                      <option value="Georgia">Georgia</option>
-                      <option value="Comic Sans MS">Comic Sans MS</option>
-                    </select>
-                  </div>
-                  
-                  {/* Text Color - compact row */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-600 w-16">Color:</label>
-                    <input
-                      type="color"
-                      value={textColor}
-                      onChange={(e) => setTextColor(e.target.value)}
-                      className="w-16 h-8 border border-gray-300 rounded cursor-pointer"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <button 
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm mt-2 hover:bg-gray-50 transition-colors" 
-              onClick={addText}
-              disabled={isParsing}
-            >
-              + Text
-            </button>
           </div>
 
           {/* Center: Canvas */}
@@ -773,6 +918,14 @@ export default function Tool3PanelPage() {
             <div className="flex items-center justify-between text-xs text-gray-600">
               <div>Zoom: {(scale*100).toFixed(0)}%</div>
               <div className="space-x-2 flex items-center gap-2">
+                <button 
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                  onClick={addText}
+                  disabled={isParsing}
+                  title="Add Text Box"
+                >
+                  + Text
+                </button>
                 <button 
                   className="px-2 py-0.5 border border-red-300 rounded text-red-600 hover:bg-red-50 transition-colors" 
                   onClick={()=>{
@@ -821,21 +974,6 @@ export default function Tool3PanelPage() {
               </div>
             </div>
             <svg ref={svgRef} className="w-full h-[520px] border rounded bg-white"
-              // Zoom is now only controlled by buttons, not trackpad/wheel
-              // Removed onWheel handler to prevent accidental zooming
-              onMouseDown={(e)=>{ 
-                const target = e.target as Element;
-                // If clicking on SVG background (not on an element), deselect and start panning
-                if (target.tagName==='svg' || (target.tagName==='g' && !target.closest('image') && !target.closest('rect') && !target.closest('text') && !target.closest('circle'))) {
-                  setSelectedId(null); // Deselect when clicking empty area
-                  setPanning(true); 
-                  (window as any)._panStart={ x:e.clientX-pan.x, y:e.clientY-pan.y }; 
-                }
-              }}
-              onMouseMove={(e)=>{ if (panning && (window as any)._panStart){ const s=(window as any)._panStart; setPan({ x:e.clientX - s.x, y:e.clientY - s.y }); } }}
-              onMouseUp={()=>setPanning(false)} onMouseLeave={()=>setPanning(false)}
-              onDragOver={(e)=>{e.preventDefault(); e.stopPropagation();}}
-              onDrop={(e)=>{ e.preventDefault(); e.stopPropagation(); const data=e.dataTransfer?.getData('text/plain'); if(!data || !svgRef.current) return; const rect=svgRef.current.getBoundingClientRect(); const cx = (e.clientX-rect.left - pan.x)/scale; const cy = (e.clientY-rect.top - pan.y)/scale; addIconAt(data, cx, cy); }}
               onClick={(e)=>{
                 // Deselect when clicking directly on SVG background (not on elements)
                 const target = e.target as Element;
@@ -844,13 +982,74 @@ export default function Tool3PanelPage() {
                   setSelectedId(null);
                 }
               }}
+              onDragOver={(e)=>{e.preventDefault(); e.stopPropagation();}}
+              onDrop={(e)=>{ 
+                e.preventDefault(); 
+                e.stopPropagation(); 
+                const data=e.dataTransfer?.getData('text/plain'); 
+                if(!data || !svgRef.current) return; 
+                const rect=svgRef.current.getBoundingClientRect(); 
+                const cx = (e.clientX-rect.left)/scale; 
+                const cy = (e.clientY-rect.top)/scale; 
+                addIconAt(data, cx, cy); 
+              }}
             >
-              <g transform={`translate(${pan.x},${pan.y}) scale(${scale})`}>
-              {elems.map(e => (
-                <Draggable key={e.id} onDrag={(dx,dy)=>onDrag(e.id,dx,dy)}>
-                  {e.kind==='icon' && e.svg && (
-                    <>
-                      <image href={`data:image/svg+xml;utf8,${encodeURIComponent(e.svg)}`} x={e.x} y={e.y} width={e.w} height={e.h} onMouseDown={(e)=>{e.stopPropagation(); setSelectedId(e.currentTarget.getAttribute('data-id') || null);}} data-id={e.id} />
+              <g transform={`scale(${scale})`}>
+              {elems.map(e => {
+                if (e.kind === 'icon' && e.svg) {
+                  const handleMouseDown = (ev: React.MouseEvent<SVGImageElement>) => {
+                    ev.stopPropagation();
+                    setSelectedId(e.id);
+                    
+                    const svg = ev.currentTarget.ownerSVGElement;
+                    if (!svg) return;
+                    
+                    const pt = svg.createSVGPoint();
+                    pt.x = ev.clientX;
+                    pt.y = ev.clientY;
+                    const ctm = svg.getScreenCTM();
+                    if (!ctm) return;
+                    const startPoint = pt.matrixTransform(ctm.inverse());
+                    
+                    const move = (moveEv: MouseEvent) => {
+                      pt.x = moveEv.clientX;
+                      pt.y = moveEv.clientY;
+                      const currentPoint = pt.matrixTransform(ctm.inverse());
+                      
+                      const dx = currentPoint.x - startPoint.x;
+                      const dy = currentPoint.y - startPoint.y;
+                      
+                      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                        onDrag(e.id, dx, dy);
+                        startPoint.x = currentPoint.x;
+                        startPoint.y = currentPoint.y;
+                      }
+                    };
+                    
+                    const up = () => {
+                      window.removeEventListener('mousemove', move);
+                      window.removeEventListener('mouseup', up);
+                    };
+                    
+                    window.addEventListener('mousemove', move);
+                    window.addEventListener('mouseup', up);
+                  };
+                  
+                  return (
+                    <g key={e.id}>
+                      <image 
+                        href={`data:image/svg+xml;utf8,${encodeURIComponent(
+                          e.iconColor && e.svg ? modifySvgColor(e.svg, e.iconColor) : e.svg || ''
+                        )}`} 
+                        x={e.x} 
+                        y={e.y} 
+                        width={e.w} 
+                        height={e.h}
+                        preserveAspectRatio="none"
+                        onMouseDown={handleMouseDown}
+                        data-id={e.id}
+                        style={{ cursor: 'move' }}
+                      />
                       {selectedId === e.id && (
                         <>
                           <CornerHandle x={e.x} y={e.y} onResize={(dx,dy)=>onResize(e.id,dx,dy,'nw')} cursor="nwse-resize" />
@@ -859,29 +1058,188 @@ export default function Tool3PanelPage() {
                           <CornerHandle x={e.x+e.w} y={e.y+e.h} onResize={(dx,dy)=>onResize(e.id,dx,dy,'se')} cursor="nwse-resize" />
                         </>
                       )}
-                    </>
-                  )}
-                  {e.kind==='text' && (
-                    <EditableText 
-                      x={e.x} 
-                      y={e.y} 
-                      w={e.w} 
-                      h={e.h} 
-                      text={e.text||''} 
-                      fontSize={e.fontSize || 14}
-                      fontFamily={e.fontFamily || 'Arial'}
-                      textColor={e.textColor || '#000000'}
-                      onChange={(t)=>setElems(prev=>prev.map(it=>it.id===e.id?{...it, text:t}:it))}
-                      onPropertyChange={(props)=>setElems(prev=>prev.map(it=>it.id===e.id?{...it, ...props}:it))}
-                      onResize={(dx,dy,corner)=>onResize(e.id,dx,dy,corner)} 
-                      onSelect={()=>setSelectedId(e.id)} 
-                      selected={selectedId === e.id} 
-                    />
-                  )}
-                </Draggable>
-              ))}
+                    </g>
+                  );
+                } else if (e.kind === 'text') {
+                  return (
+                    <g key={e.id}>
+                      <EditableText 
+                        x={e.x} 
+                        y={e.y} 
+                        w={e.w} 
+                        h={e.h} 
+                        text={e.text||''} 
+                        fontSize={e.fontSize || 14}
+                        fontFamily={e.fontFamily || 'Arial'}
+                        textColor={e.textColor || '#000000'}
+                        borderColor={e.borderColor || '#cccccc'}
+                        borderWidth={e.borderWidth ?? 1}
+                        onChange={(t)=>setElems(prev=>prev.map(it=>it.id===e.id?{...it, text:t}:it))}
+                        onPropertyChange={(props)=>setElems(prev=>prev.map(it=>it.id===e.id?{...it, ...props}:it))}
+                        onResize={(dx,dy,corner)=>onResize(e.id,dx,dy,corner)} 
+                        onSelect={()=>setSelectedId(e.id)} 
+                        selected={selectedId === e.id}
+                        onDrag={(dx,dy)=>onDrag(e.id,dx,dy)}
+                      />
+                    </g>
+                  );
+                }
+                return null;
+              })}
               </g>
             </svg>
+            
+            {/* Property Panel - Shows when text element is selected */}
+            {selectedId && elems.find(e => e.id === selectedId && e.kind === 'text') && (
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                <h4 className="text-xs font-medium text-gray-700 mb-2">
+                  Properties: Text
+                </h4>
+                {(() => {
+                  const selectedElem = elems.find(e => e.id === selectedId);
+                  if (!selectedElem || selectedElem.kind !== 'text') return null;
+                  
+                  if (selectedElem.kind === 'text') {
+                    // Text element properties
+                    const currentText = selectedElem.text || '';
+                    const currentFontSize = selectedElem.fontSize || 14;
+                    const currentTextColor = selectedElem.textColor || '#000000';
+                    const currentBorderColor = selectedElem.borderColor || '#cccccc';
+                    const currentBorderWidth = selectedElem.borderWidth ?? 1;
+                    
+                    return (
+                      <div className="space-y-2">
+                        {/* Text Input Field */}
+                        <div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-1.5 items-center">
+                          <label className="text-xs font-semibold text-gray-600">Text</label>
+                          <input
+                            type="text"
+                            value={currentText}
+                            onChange={(e) => {
+                              setElems(prev => prev.map(it => 
+                                it.id === selectedId ? { ...it, text: e.target.value } : it
+                              ));
+                            }}
+                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            placeholder="Enter text..."
+                          />
+                        </div>
+                        
+                        {/* Font Size Slider */}
+                        <div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-1.5 items-center">
+                          <label className="text-xs font-semibold text-gray-600">Font Size</label>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="range"
+                              min="10"
+                              max="48"
+                              step="1"
+                              className="w-full"
+                              value={currentFontSize}
+                              onChange={(e) => {
+                                const newSize = Number(e.target.value);
+                                setElems(prev => prev.map(it => 
+                                  it.id === selectedId ? { ...it, fontSize: newSize } : it
+                                ));
+                              }} 
+                            />
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap min-w-[35px]">
+                              {currentFontSize}px
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Text Color with Palette */}
+                        <div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-1.5 items-center">
+                          <label className="text-xs font-semibold text-gray-600">Text Color</label>
+                          <div className="flex flex-wrap gap-1 items-center">
+                            {COLOR_PALETTE.map(color => (
+                              <button
+                                key={color}
+                                onClick={() => {
+                                  setElems(prev => prev.map(it => 
+                                    it.id === selectedId ? { ...it, textColor: color } : it
+                                  ));
+                                }}
+                                className={`w-5 h-5 rounded border transition-colors ${
+                                  currentTextColor === color ? 'border-gray-600 border-2' : 'border-gray-300 hover:border-gray-400'
+                                }`}
+                                style={{ backgroundColor: color }}
+                                title={color}
+                              />
+                            ))}
+                            <ColorPickerButton
+                              value={currentTextColor}
+                              onChange={(color) => {
+                                setElems(prev => prev.map(it => 
+                                  it.id === selectedId ? { ...it, textColor: color } : it
+                                ));
+                              }}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Border Color */}
+                        <div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-1.5 items-center">
+                          <label className="text-xs font-semibold text-gray-600">Border Color</label>
+                          <div className="flex flex-wrap gap-1 items-center">
+                            {COLOR_PALETTE.map(color => (
+                              <button
+                                key={color}
+                                onClick={() => {
+                                  setElems(prev => prev.map(it => 
+                                    it.id === selectedId ? { ...it, borderColor: color } : it
+                                  ));
+                                }}
+                                className={`w-5 h-5 rounded border transition-colors ${
+                                  currentBorderColor === color ? 'border-gray-600 border-2' : 'border-gray-300 hover:border-gray-400'
+                                }`}
+                                style={{ backgroundColor: color }}
+                                title={color}
+                              />
+                            ))}
+                            <ColorPickerButton
+                              value={currentBorderColor}
+                              onChange={(color) => {
+                                setElems(prev => prev.map(it => 
+                                  it.id === selectedId ? { ...it, borderColor: color } : it
+                                ));
+                              }}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* Border Width */}
+                        <div className="grid grid-cols-[100px_1fr] gap-x-4 gap-y-1.5 items-center">
+                          <label className="text-xs font-semibold text-gray-600">Border Width</label>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="range"
+                              min="0"
+                              max="10"
+                              step="1"
+                              className="w-full"
+                              value={currentBorderWidth}
+                              onChange={(e) => {
+                                const newWidth = Number(e.target.value);
+                                setElems(prev => prev.map(it => 
+                                  it.id === selectedId ? { ...it, borderWidth: newWidth } : it
+                                ));
+                              }} 
+                            />
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap min-w-[35px]">
+                              {currentBorderWidth}px
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
+            
             <PageNavigation 
               currentPage={9} 
               onBack={() => navigate('/tool3-intro')}
@@ -896,14 +1254,15 @@ export default function Tool3PanelPage() {
           <div className="col-span-1 space-y-3">
             <div className="border rounded p-3">
               <h3 className="text-sm font-medium text-gray-900 mb-1">Search Icons</h3>
-              <input id="t3-search" className="w-full border rounded px-2 py-1 text-sm" placeholder="Search (e.g., basketball, cake)" onChange={(e)=>{
-                const q = e.target.value.toLowerCase();
-                const items = document.querySelectorAll('[data-icon-name]') as NodeListOf<HTMLButtonElement>;
-                items.forEach(btn => {
-                  const name = btn.getAttribute('data-icon-name') || '';
-                  btn.style.display = name.includes(q) ? '' : 'none';
-                });
-              }} />
+              <input 
+                id="t3-search" 
+                className="w-full border rounded px-2 py-1 text-sm" 
+                placeholder={selectedProblemId ? `Search or see defaults for ${getOperationFromProblemId(selectedProblemId)}` : "Search icons..."}
+                value={iconSearchQuery}
+                onChange={(e) => {
+                  setIconSearchQuery(e.target.value);
+                }} 
+              />
               <div className="grid grid-cols-4 gap-2 mt-2 max-h-[280px] overflow-auto">
                 {iconsLoading ? (
                   <div className="col-span-4 text-center text-xs text-gray-400 py-4">
@@ -915,7 +1274,7 @@ export default function Tool3PanelPage() {
                     <p className="text-[10px] text-gray-400 mt-1">Check backend logs for errors</p>
                   </div>
                 ) : (
-                  svgIcons.map((ic, idx) => (
+                  getFilteredIcons().map((ic, idx) => (
                     <button 
                       key={`${ic.name}-${idx}`}
                       data-icon-name={ic.name.toLowerCase()} 
@@ -925,7 +1284,9 @@ export default function Tool3PanelPage() {
                       onDragStart={(e)=>e.dataTransfer?.setData('text/plain', ic.svg_content)}
                       title={ic.name}
                     >
-                      <div className="text-[10px] text-gray-500 truncate" title={ic.name}>{ic.name}</div>
+                      <div className="text-[10px] text-gray-500 truncate" title={ic.name}>
+                        {getIconDisplayName(ic.name)}
+                      </div>
                       <img 
                         src={`data:image/svg+xml;utf8,${encodeURIComponent(ic.svg_content)}`} 
                         className="h-10 w-auto mx-auto" 
@@ -957,37 +1318,48 @@ export default function Tool3PanelPage() {
                     elems: elems, // Preserve canvas elements
                     problemText: problemText // Preserve text input
                   });
+                  
+                  // Track canvas state and image
+                  const session = sessionManager.getParticipantData();
+                  const sessionId = sessionStorage.getItem('tracking_session_id');
+                  if (session && sessionId) {
+                    const operation = selectedProblemId ? getOperationFromProblemId(selectedProblemId) : undefined;
+                    try {
+                      // Track canvas state
+                      await submitToolCCanvas(
+                        session.participantId,
+                        parseInt(sessionId),
+                        { elems, problemText, selectedProblemId },
+                        operation
+                      );
+                      // Track saved image
+                      await submitToolCImage(
+                        session.participantId,
+                        parseInt(sessionId),
+                        png,
+                        operation,
+                        false // not final yet
+                      );
+                    } catch (err) {
+                      console.error('Failed to track Tool C image:', err);
+                    }
+                  }
                 }}
               >
                 Save Image
               </button>
               
-              {/* Final output indicators per operation */}
-              {Object.keys(finalOutputSelected).length > 0 && (
-                <div className="mb-3 space-y-2">
-                  {Object.entries(finalOutputSelected).map(([operation, imageUrl]) => (
-                    <div key={operation} className="p-2 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="text-xs font-medium text-green-800 mb-1">
-                        ✓ Selected: {operation.charAt(0).toUpperCase() + operation.slice(1)}
-                      </div>
-                      <img 
-                        src={imageUrl} 
-                        alt={`Final output for ${operation}`} 
-                        className="w-full h-auto rounded border border-green-300"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
               <div className="max-h-[200px] overflow-auto grid grid-cols-2 gap-2">
                 {snapshots.length===0 ? (
                   <div className="col-span-2 text-center text-xs text-gray-400">No saved images yet. Click "Save Image" to save your canvas.</div>
                 ) : (
                   snapshots.map((s, idx) => {
-                    // Check if this image is selected for any operation
+                    // Find which operation this image is selected for
+                    const normalizeUrl = (url: string) => url.split('?')[0].split('#')[0];
                     const selectedForOperation = Object.entries(finalOutputSelected).find(
-                      ([_, url]) => url === s.url
+                      ([_, url]) => normalizeUrl(url) === normalizeUrl(s.url)
                     )?.[0];
+                    const formatOp = (op: string) => op.charAt(0).toUpperCase() + op.slice(1);
                     
                     return (
                       <div 
@@ -1004,7 +1376,7 @@ export default function Tool3PanelPage() {
                         <img src={s.url} className="w-full h-auto" alt={`Saved image ${idx + 1}`} />
                         {selectedForOperation && (
                           <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded">
-                            ✓ {selectedForOperation.charAt(0).toUpperCase() + selectedForOperation.slice(1)}
+                            ✓ {formatOp(selectedForOperation)}
                           </div>
                         )}
                       </div>
@@ -1118,34 +1490,57 @@ export default function Tool3PanelPage() {
 
 function Draggable({ children, onDrag }: { children: React.ReactNode; onDrag: (dx:number,dy:number)=>void }) {
   const onMouseDown = (e: React.MouseEvent<SVGElement>) => {
-    e.stopPropagation(); // Prevent event bubbling
-    const start = { x: e.clientX, y: e.clientY };
-    let hasMoved = false; // Track if mouse moved (drag occurred)
+    // Don't stop propagation - let child elements handle their own events
+    // But we still want to handle dragging
+    
+    const svg = e.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    
+    // Get initial point in SVG coordinates
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const startPoint = pt.matrixTransform(ctm.inverse());
+    
+    let isDragging = false;
+    
     const move = (ev: MouseEvent) => {
-      const dx = Math.abs(ev.clientX - start.x);
-      const dy = Math.abs(ev.clientY - start.y);
-      if (dx > 3 || dy > 3) { // Threshold to distinguish click from drag
-        hasMoved = true;
+      // Get current point in SVG coordinates
+      pt.x = ev.clientX;
+      pt.y = ev.clientY;
+      const currentPoint = pt.matrixTransform(ctm.inverse());
+      
+      const dx = currentPoint.x - startPoint.x;
+      const dy = currentPoint.y - startPoint.y;
+      
+      // Only start dragging if moved more than 2 pixels
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        isDragging = true;
       }
-      onDrag(ev.clientX - start.x, ev.clientY - start.y);
+      
+      if (isDragging) {
+        // Call onDrag with the delta in SVG coordinates
+        onDrag(dx, dy);
+        
+        // Update start point for next move
+        startPoint.x = currentPoint.x;
+        startPoint.y = currentPoint.y;
+      }
     };
+    
     const up = () => {
-      // If we dragged, prevent click event from interfering with selection
-      if (hasMoved) {
-        // Small delay to let click event pass
-        setTimeout(() => {
-          window.removeEventListener('mousemove', move);
-          window.removeEventListener('mouseup', up);
-        }, 0);
-      } else {
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', up);
-      }
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
     };
-    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   };
+  
   return (
-    <g onMouseDown={onMouseDown} style={{ cursor: 'move' }}>
+    <g onMouseDown={onMouseDown} style={{ cursor: 'move', pointerEvents: 'all' }}>
       {children}
     </g>
   );
@@ -1172,17 +1567,21 @@ function CornerHandle({ x, y, onResize, cursor = 'nwse-resize' }: { x:number; y:
 }
 
 function EditableText({ 
-  x, y, w, h, text, fontSize, fontFamily, textColor, onChange, onPropertyChange, onResize, onSelect, selected 
+  x, y, w, h, text, fontSize, fontFamily, textColor, borderColor, borderWidth, onChange, onPropertyChange, onResize, onSelect, selected, onDrag
 }: { 
   x:number; y:number; w:number; h:number; text:string; fontSize?:number; fontFamily?:string; textColor?:string; 
+  borderColor?:string; borderWidth?:number;
   onChange:(t:string)=>void; onPropertyChange?:(props:{fontSize?:number; fontFamily?:string; textColor?:string})=>void;
-  onResize:(dx:number,dy:number,corner:'nw'|'ne'|'sw'|'se')=>void; onSelect?:()=>void; selected?:boolean 
+  onResize:(dx:number,dy:number,corner:'nw'|'ne'|'sw'|'se')=>void; onSelect?:()=>void; selected?:boolean;
+  onDrag?:(dx:number,dy:number)=>void;
 }) {
   // onPropertyChange is available for future use (e.g., font size/color changes)
   void onPropertyChange;
   const baseFontSize = fontSize || 14;
   const baseFontFamily = fontFamily || 'Arial';
   const baseTextColor = textColor || '#000000';
+  const baseBorderColor = borderColor || '#cccccc';
+  const baseBorderWidth = borderWidth ?? 1;
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1232,22 +1631,81 @@ function EditableText({
     }
   };
   
-  // Split text by newlines for multi-line rendering
-  const textLines = text.split('\n');
+  // Padding for text inside box
+  const textPadding = 4;
+  
+  // Wrap text to fit within box width using the shared wrapText function
+  const textLines = wrapText(text || '', w, baseFontSize, textPadding);
   const lineHeight = baseFontSize * 1.2;
   // Box coordinates: rect starts at (x-4, y-16) with dimensions (w, h)
   // Text should be positioned consistently from the top-left of the box
   // SVG text y coordinate is the baseline of the first line
   // So we need: boxTop + padding + fontSize (to get to baseline)
   const boxTop = y - 16;
-  const textPadding = 4;
   // Start Y position: top of box + padding + font size for baseline
   // This allows leading newlines/spaces to push text down naturally
   const textStartY = boxTop + textPadding + baseFontSize;
   
+  // Handle dragging similar to icons
+  const handleMouseDown = (e: React.MouseEvent<SVGElement>) => {
+    if (isEditing) return; // Don't drag while editing
+    
+    e.stopPropagation();
+    onSelect?.();
+    
+    if (!onDrag) return;
+    
+    const svg = e.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const startPoint = pt.matrixTransform(ctm.inverse());
+    
+    const move = (moveEv: MouseEvent) => {
+      pt.x = moveEv.clientX;
+      pt.y = moveEv.clientY;
+      const currentPoint = pt.matrixTransform(ctm.inverse());
+      
+      const dx = currentPoint.x - startPoint.x;
+      const dy = currentPoint.y - startPoint.y;
+      
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        onDrag(dx, dy);
+        startPoint.x = currentPoint.x;
+        startPoint.y = currentPoint.y;
+      }
+    };
+    
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+  
   return (
     <>
-      <rect x={x-4} y={y-16} width={w} height={h} rx={6} className="fill-white opacity-80 stroke-gray-300" onDoubleClick={onDblClick} onMouseDown={(e)=>{e.stopPropagation(); onSelect?.();}} />
+      <rect 
+        x={x-4} 
+        y={y-16} 
+        width={w} 
+        height={h} 
+        rx={6} 
+        className="fill-white opacity-80" 
+        fill="white"
+        fillOpacity="0.8"
+        stroke={baseBorderColor}
+        strokeWidth={baseBorderWidth}
+        onDoubleClick={onDblClick} 
+        onMouseDown={handleMouseDown} 
+        style={{ cursor: 'move' }} 
+      />
       {isEditing ? (
         <foreignObject x={x-4} y={boxTop} width={w} height={h}>
           <textarea
@@ -1264,15 +1722,18 @@ function EditableText({
               lineHeight: '1.2',
               padding: `${textPadding}px 4px`,
               margin: 0,
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              textAlign: 'center'
             }}
             placeholder="Enter text (Enter for new line)"
           />
         </foreignObject>
       ) : (
         <text 
-          x={x} 
+          x={x + w/2} 
           y={textStartY} 
+          textAnchor="middle"
+          dominantBaseline="hanging"
           className="select-none" 
           style={{ 
             fontSize: baseFontSize, 
@@ -1280,10 +1741,10 @@ function EditableText({
             fill: baseTextColor
           }} 
           onDoubleClick={onDblClick} 
-          onMouseDown={(e)=>{e.stopPropagation(); onSelect?.();}}
+          onMouseDown={handleMouseDown}
         >
           {textLines.map((line, idx) => (
-            <tspan key={idx} x={x} dy={idx === 0 ? 0 : lineHeight}>
+            <tspan key={idx} x={x + w/2} dy={idx === 0 ? 0 : lineHeight}>
               {line || '\u00A0'}
             </tspan>
           ))}

@@ -18,6 +18,7 @@ services:
     volumes:
       - /var/lib/peachlab/data/visual4math/data:/app/data
       - /var/lib/peachlab/data/visual4math/cached_images:/app/cached_images
+      - /var/lib/peachlab/data/visual4math/dataset:/app/dataset
     # VIRTUAL_HOST and VIRTUAL_PORT map your port to the subdomain
     # Let's Encrypt ensures HTTPS for your deployment
     environment:
@@ -31,6 +32,7 @@ services:
       # Application environment variables
       DATA_FILE_PATH: '/app/data/simple_data.json'
       CACHE_DIR: '/app/cached_images'
+      DATASET_DIR: '/app/dataset'
       ALLOWED_ORIGINS: 'https://visual4math.peachhub-cntr1.inf.ethz.ch'
     # Watchtower label enables automatic updates after new images are pushed to GHCR
     labels:

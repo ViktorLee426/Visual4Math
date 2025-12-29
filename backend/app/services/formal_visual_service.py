@@ -112,6 +112,7 @@ def extract_operations_and_entities(data: Dict):
     """
     Extract operations, entities, and result entities from parsed data.
     Adapted from math2visual's extract_operations_and_entities.
+    For multiplication, consolidates multiple containers into 2 entities.
     """
     operations = []
     entities = []
@@ -135,6 +136,60 @@ def extract_operations_and_entities(data: Dict):
 
         child_ents = node.get("entities", [])
         my_result = node.get("result_container")
+
+        # Special handling for multiplication: consolidate into 2 entities
+        if op == "multiplication" and parent_op is None and len(child_ents) >= 2:
+            # Check if all containers have the same entity_quantity (repeated groups)
+            quantities = [e.get("item", {}).get("entity_quantity") for e in child_ents if "operation" not in e]
+            entity_types = [e.get("item", {}).get("entity_type", "") for e in child_ents if "operation" not in e]
+            container_types = [e.get("container_type", "") for e in child_ents if "operation" not in e]
+            
+            if len(set(quantities)) == 1 and len(quantities) >= 2:
+                # This is multiplication with repeated equal groups (e.g., 3 trays × 2 cupcakes)
+                num_groups = len(child_ents)
+                items_per_group = quantities[0] if quantities else 0
+                entity_type = entity_types[0] if entity_types else ""
+                container_type = container_types[0] if container_types else ""
+                
+                logger.info(f"   🔢 Multiplication detected: {num_groups} groups × {items_per_group} items = {num_groups * items_per_group}")
+                logger.info(f"   📦 Consolidating {num_groups} containers into 2 entities for multiplication")
+                
+                # Entity 1: Multiplier (number of groups) - rendered as text showing the number
+                multiplier_entity = {
+                    "name": "container1",
+                    "item": {
+                        "entity_type": "multiplier",  # Special type for multiplier rendering
+                        "entity_quantity": num_groups,
+                        "entity_name": container_type if container_type else "group"
+                    },
+                    "container_type": container_type if container_type else "group",
+                    "container_name": container_type if container_type else "",
+                    "layout": "multiplier"
+                }
+                entities.append(multiplier_entity)
+                
+                # Entity 2: Multiplicand (items per group) - show as entity type with icons
+                multiplicand_entity = {
+                    "name": "container2",
+                    "item": {
+                        "entity_type": entity_type,
+                        "entity_quantity": items_per_group,
+                        "entity_name": entity_type
+                    },
+                    "container_type": container_type if container_type else "",
+                    "container_name": container_type if container_type else "",
+                    "layout": "normal"
+                }
+                entities.append(multiplicand_entity)
+                
+                # Record operation
+                operations.append({"type": op})
+                
+                # Record result if available
+                if my_result and isinstance(my_result, dict):
+                    result_entities.append(my_result)
+                
+                return
 
         if len(child_ents) < 2:
             return
@@ -345,6 +400,9 @@ def generate_formal_visual_elements(visual_lang: str, start_x: int = 50, start_y
             # Create individual items inside the box
             if layout != "large" and layout != "multiplier":
                 item_svg_path = find_svg_icon(t)
+                if item_svg_path:
+                    icon_filename = os.path.basename(item_svg_path)
+                    logger.info(f"   📌 Using icon '{icon_filename}' for entity_type '{t}' (normal layout, {int(q)} items)")
                 item_svg_content = read_svg_content(item_svg_path) if item_svg_path else None
                 
                 cols = entity.get("cols", 1)
@@ -370,6 +428,9 @@ def generate_formal_visual_elements(visual_lang: str, start_x: int = 50, start_y
             elif layout == "large":
                 # Large layout: show one big icon with number
                 item_svg_path = find_svg_icon(t)
+                if item_svg_path:
+                    icon_filename = os.path.basename(item_svg_path)
+                    logger.info(f"   📌 Using icon '{icon_filename}' for entity_type '{t}' (large layout, quantity={q})")
                 item_svg_content = read_svg_content(item_svg_path) if item_svg_path else None
                 
                 svg_x = entity["planned_x"] + (entity["planned_width"] - ITEM_SIZE * 4) / 2
@@ -422,6 +483,9 @@ def generate_formal_visual_elements(visual_lang: str, start_x: int = 50, start_y
             op_svg_path = find_svg_icon(op_type)
             if not op_svg_path:
                 op_svg_path = find_svg_icon(operator_svg_mapping["default"])
+            if op_svg_path:
+                icon_filename = os.path.basename(op_svg_path)
+                logger.info(f"   📌 Using icon '{icon_filename}' for operator '{op_type}'")
             op_svg_content = read_svg_content(op_svg_path) if op_svg_path else None
             
             elements.append({
@@ -437,6 +501,9 @@ def generate_formal_visual_elements(visual_lang: str, start_x: int = 50, start_y
         
         # Create equals sign
         equals_svg_path = find_svg_icon("equals")
+        if equals_svg_path:
+            icon_filename = os.path.basename(equals_svg_path)
+            logger.info(f"   📌 Using icon '{icon_filename}' for equals sign")
         equals_svg_content = read_svg_content(equals_svg_path) if equals_svg_path else None
         
         elements.append({
@@ -452,6 +519,9 @@ def generate_formal_visual_elements(visual_lang: str, start_x: int = 50, start_y
         
         # Create question mark
         question_svg_path = find_svg_icon("question")
+        if question_svg_path:
+            icon_filename = os.path.basename(question_svg_path)
+            logger.info(f"   📌 Using icon '{icon_filename}' for question mark")
         question_svg_content = read_svg_content(question_svg_path) if question_svg_path else None
         
         elements.append({

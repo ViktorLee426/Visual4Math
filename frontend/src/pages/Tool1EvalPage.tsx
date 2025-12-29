@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { sessionManager } from '../utils/sessionManager';
 import TimeProportionalProgress from '../components/TimeProportionalProgress';
 import PageNavigation from '../components/PageNavigation';
+import { submitEvaluation } from '../services/trackingApi';
 
 interface LikertQuestion {
     id: string;
@@ -130,6 +131,27 @@ export default function Tool1EvalPage() {
     // Handle Likert scale responses (1-7)
     const handleLikertChange = (questionId: string, value: number) => {
         setLikertResponses(prev => ({ ...prev, [questionId]: value }));
+        
+        // Track evaluation response
+        const session = sessionManager.getParticipantData();
+        const sessionId = sessionStorage.getItem('tracking_session_id');
+        if (session && sessionId) {
+            // Find the question text
+            const question = evaluationCategories
+                .flatMap(cat => cat.likertQuestions || [])
+                .find(q => q.id === questionId);
+            
+            if (question) {
+                submitEvaluation(
+                    session.participantId,
+                    parseInt(sessionId),
+                    'tool_a',
+                    questionId,
+                    question.question,
+                    value
+                ).catch(err => console.error('Failed to track evaluation:', err));
+            }
+        }
     };
 
     // Note: Text responses for open feedback questions are collected during the interview

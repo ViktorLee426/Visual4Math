@@ -26,6 +26,11 @@ else:
     load_dotenv(override=False)  # Only scan current directory
 
 from app.api import router as api_router
+from app.database.db import init_db
+
+# Initialize database on startup
+init_db()
+
 #create FastAPI app instance, this is the core backend server
 # sets up the web app that will handle all API requests and responses
 app = FastAPI(

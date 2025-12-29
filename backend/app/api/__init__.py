@@ -1,7 +1,7 @@
 # backend/app/api/__init__.py
 from fastapi import APIRouter
 from .routes import chat, image, research, images
-from .routes import image_proxy, parse, manipulatives
+from .routes import image_proxy, parse, manipulatives, tracking
 
 router = APIRouter()
 router.include_router(chat.router, prefix="/chat", tags=["Chat"])
@@ -11,3 +11,4 @@ router.include_router(image_proxy.router, prefix="/image-proxy", tags=["ImagePro
 router.include_router(images.router, prefix="/images", tags=["Images"])
 router.include_router(parse.router, prefix="/parse", tags=["Parse"])
 router.include_router(manipulatives.router, prefix="/manipulatives", tags=["Manipulatives"])
+router.include_router(tracking.router, tags=["Tracking"])
