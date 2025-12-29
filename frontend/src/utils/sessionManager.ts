@@ -100,16 +100,38 @@ export class SessionManager {
         const parsed = JSON.parse(savedSession);
         this.participantData = parsed;
         
-        // Ensure toolOrdering exists for existing sessions
-        if (this.participantData && !this.participantData.toolOrdering && this.participantData.participantId) {
-          this.participantData.toolOrdering = getToolOrdering(this.participantData.participantId);
+        // Ensure required structures exist for existing sessions
+        if (this.participantData) {
+          // Ensure toolOrdering exists
+          if (!this.participantData.toolOrdering && this.participantData.participantId) {
+            this.participantData.toolOrdering = getToolOrdering(this.participantData.participantId);
+          }
+          
+          // Ensure closedTasks exists (important for tool1-task)
+          if (!this.participantData.closedTasks) {
+            this.participantData.closedTasks = { task1: null, task2: null };
+          }
+          
+          // Ensure openTasks exists
+          if (!this.participantData.openTasks) {
+            this.participantData.openTasks = { task1: null, task2: null };
+          }
+          
+          // Ensure session_data exists
+          if (!this.participantData.session_data) {
+            this.participantData.session_data = {};
+          }
+          
+          // Save if we made any fixes (always save after ensuring structures exist)
           this.saveSession();
         }
         
         console.log('Session loaded from session storage:', {
           participantId: this.participantData?.participantId,
           currentPhase: this.participantData?.currentPhase,
-          toolOrdering: this.participantData?.toolOrdering
+          toolOrdering: this.participantData?.toolOrdering,
+          hasClosedTasks: !!this.participantData?.closedTasks,
+          hasTool1Task: !!this.participantData?.closedTasks?.task1
         });
         return this.participantData;
       }
@@ -134,22 +156,29 @@ export class SessionManager {
     public savePhaseData(phase: string, data: any): void {
         if (!this.participantData) return;
         
+        // For tool1-task, tool2-task, tool3-task: merge with existing data to preserve conversation_log
+        if (phase === 'tool1-task' || phase === 'tool2-task' || phase === 'tool3-task') {
+            const existingData = this.getPhaseData(phase);
+            if (existingData && existingData.conversation_log && Array.isArray(existingData.conversation_log)) {
+                // If new data doesn't have conversation_log, preserve the existing one
+                if (!data.conversation_log || !Array.isArray(data.conversation_log)) {
+                    data = { ...data, conversation_log: existingData.conversation_log };
+                }
+            }
+        }
+        
         // Create a cleaned copy of the data without images
         let cleanData = data;
         
-        // For task data, trim conversation and keep only lightweight images (URLs or tiny base64)
+        // For task data, preserve conversation_log but clean up large images
         // Check for both 'tool-' prefix and 'tool1-task', 'tool2-task', 'tool3-task' formats
         if (phase.startsWith('tool-') || phase.startsWith('closed-task-') || phase.startsWith('open-task-') || 
             phase === 'tool1-task' || phase === 'tool2-task' || phase === 'tool3-task') {
-            const MAX_MESSAGES = 30; // keep recent messages
             const MAX_INLINE_IMAGE_CHARS = 20000; // keep tiny inline previews only
 
             const clone = JSON.parse(JSON.stringify(data));
+            // Always preserve conversation_log - don't trim it (users need full history)
             if (clone && Array.isArray(clone.conversation_log)) {
-                // keep only the last N messages
-                if (clone.conversation_log.length > MAX_MESSAGES) {
-                    clone.conversation_log = clone.conversation_log.slice(-MAX_MESSAGES);
-                }
                 // Keep http/https URLs and relative URLs (like /api/images/{id}); drop large base64; keep very small base64 previews
                 clone.conversation_log = clone.conversation_log.map((m: any) => {
                     if (!m) return m;
@@ -167,7 +196,7 @@ export class SessionManager {
                                 return m; // tiny preview ok
                             }
                             const { image_url, ...rest } = m;
-                            return rest; // drop large inline
+                            return rest; // drop large inline but keep message
                         }
                     }
                     return m;

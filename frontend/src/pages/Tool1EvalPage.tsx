@@ -126,7 +126,27 @@ export default function Tool1EvalPage() {
         } else {
             sessionManager.updatePhase('tool1-eval');
         }
+
+        // Restore saved evaluation responses
+        const savedEvalData = sessionManager.getPhaseData('tool1-eval');
+        if (savedEvalData?.likertResponses) {
+            console.log('✅ Restored evaluation responses');
+            setLikertResponses(savedEvalData.likertResponses);
+        }
     }, [navigate]);
+
+    // Save responses whenever they change
+    useEffect(() => {
+        if (Object.keys(likertResponses).length > 0) {
+            const textResponses: Record<string, string> = {};
+            const allResponses = { ...likertResponses, ...textResponses };
+            sessionManager.savePhaseData('tool1-eval', { 
+                likertResponses, 
+                textResponses,
+                allResponses 
+            });
+        }
+    }, [likertResponses]);
 
     // Handle Likert scale responses (1-7)
     const handleLikertChange = (questionId: string, value: number) => {

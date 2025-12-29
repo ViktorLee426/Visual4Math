@@ -91,61 +91,88 @@ export default function Tool1ChatPage() {
             sessionManager.updatePhase('tool1-task');
         }
 
-        // Start timer when entering task page
-        setStartTime(Date.now());
-
-        // Cleanup: clear timer when leaving
-        return () => {
-            setStartTime(null);
-        };
-
-        // Load conversation history directly from localStorage (simple and reliable)
-        const CONVERSATION_KEY = 'tool1_conversation_history';
+        // Restore timer if it exists, otherwise start new timer
         try {
-            const savedConversation = localStorage.getItem(CONVERSATION_KEY);
-            if (savedConversation) {
-                const parsed = JSON.parse(savedConversation);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('✅ Loaded conversation history:', parsed.length, 'messages');
-                    setMessages(parsed);
+            const TIMER_KEY = 'task_timer_tool1-task';
+            const savedTimer = sessionStorage.getItem(TIMER_KEY);
+            if (savedTimer) {
+                const savedTime = parseInt(savedTimer, 10);
+                if (!isNaN(savedTime)) {
+                    console.log('✅ Restored timer from previous session');
+                    setStartTime(savedTime, 'tool1-task');
                 } else {
-                    console.log('⚠️ Empty conversation history, initializing empty');
-                    setMessages([]);
+                    setStartTime(Date.now(), 'tool1-task');
                 }
             } else {
-                console.log('⚠️ No saved conversation found, initializing empty');
+                setStartTime(Date.now(), 'tool1-task');
+            }
+        } catch (e) {
+            console.warn('Error restoring timer:', e);
+            setStartTime(Date.now(), 'tool1-task');
+        }
+
+        // Don't clear timer on unmount - keep it running
+
+        // Load conversation history from sessionManager (which persists to sessionStorage)
+        const taskData = sessionManager.getPhaseData('tool1-task');
+        if (taskData?.conversation_log && Array.isArray(taskData.conversation_log) && taskData.conversation_log.length > 0) {
+            console.log('✅ Loaded conversation history from sessionManager:', taskData.conversation_log.length, 'messages');
+            setMessages(taskData.conversation_log);
+        } else {
+            // Fallback to localStorage for backward compatibility
+            const CONVERSATION_KEY = 'tool1_conversation_history';
+            try {
+                const savedConversation = localStorage.getItem(CONVERSATION_KEY);
+                if (savedConversation) {
+                    const parsed = JSON.parse(savedConversation as string);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        console.log('✅ Loaded conversation history from localStorage:', parsed.length, 'messages');
+                        setMessages(parsed);
+                        // Migrate to sessionManager
+                        sessionManager.savePhaseData('tool1-task', {
+                            ...taskData,
+                            conversation_log: parsed
+                        });
+                    } else {
+                        console.log('⚠️ Empty conversation history, initializing empty');
+                        setMessages([]);
+                    }
+                } else {
+                    console.log('⚠️ No saved conversation found, initializing empty');
+                    setMessages([]);
+                }
+            } catch (error) {
+                console.error('Error loading conversation:', error);
                 setMessages([]);
             }
-        } catch (error) {
-            console.error('Error loading conversation:', error);
-            setMessages([]);
         }
 
         // Load existing task data for other fields (problem selection, final outputs, etc.)
-        const taskData = sessionManager.getPhaseData('tool1-task');
-        if (taskData) {
+        // Note: taskData was already loaded above for conversation_log
+        const taskDataForFields = sessionManager.getPhaseData('tool1-task');
+        if (taskDataForFields) {
             // Load final outputs if selected (per operation)
-            const finalOutputs = taskData.final_outputs || (taskData.final_output ? { 'addition': taskData.final_output } : {});
+            const finalOutputs = taskDataForFields.final_outputs || (taskDataForFields.final_output ? { 'addition': taskDataForFields.final_output } : {});
             if (finalOutputs && Object.keys(finalOutputs).length > 0) {
                 setFinalOutputSelected(finalOutputs);
             }
 
             // Load selected problem if available, otherwise default to Addition
-            const savedProblemId = taskData.selected_problem_id;
+            const savedProblemId = taskDataForFields.selected_problem_id;
             const defaultProblemId = 'toolA-add'; // Addition by default
             const problemIdToUse = savedProblemId || defaultProblemId;
             const problem = toolAProblems.find(p => p.id === problemIdToUse);
             if (problem) {
                 setSelectedProblemId(problemIdToUse);
                 setProblemData({
-                    problemText: problem.problemText,
-                    imageUrl: problem.imageUrl,
-                    problemId: problem.id
+                    problemText: problem!.problemText,
+                    imageUrl: problem!.imageUrl,
+                    problemId: problem!.id
                 });
                 // Save default if not already saved
                 if (!savedProblemId) {
                     sessionManager.savePhaseData('tool1-task', {
-                        ...taskData,
+                        ...taskDataForFields,
                         selected_problem_id: defaultProblemId
                     });
                 }
@@ -158,9 +185,9 @@ export default function Tool1ChatPage() {
             if (problem) {
                 setSelectedProblemId(defaultProblemId);
                 setProblemData({
-                    problemText: problem.problemText,
-                    imageUrl: problem.imageUrl,
-                    problemId: problem.id
+                    problemText: problem!.problemText,
+                    imageUrl: problem!.imageUrl,
+                    problemId: problem!.id
                 });
             }
         }
@@ -196,22 +223,32 @@ export default function Tool1ChatPage() {
         };
     }, []);
 
-    // Save conversation history directly to localStorage whenever messages change
+    // Save conversation history to sessionManager (which persists to sessionStorage) whenever messages change
     useEffect(() => {
         const CONVERSATION_KEY = 'tool1_conversation_history';
         try {
+            // Save to localStorage for backward compatibility
             localStorage.setItem(CONVERSATION_KEY, JSON.stringify(messages));
-            console.log('💾 Saved conversation to localStorage:', messages.length, 'messages');
+            
+            // Save to sessionManager (which uses sessionStorage)
+            const taskData = sessionManager.getPhaseData('tool1-task') || {};
+            sessionManager.savePhaseData('tool1-task', {
+                ...taskData,
+                conversation_log: messages
+            });
+            
+            console.log('💾 Saved conversation to sessionManager:', messages.length, 'messages');
         } catch (error) {
-            console.error('Error saving conversation to localStorage:', error);
+            console.error('Error saving conversation:', error);
         }
     }, [messages]);
 
     // Save other task data (problem selection, final outputs) through sessionManager
+    // IMPORTANT: Always preserve conversation_log when saving other fields
     useEffect(() => {
         if (problemData) {
             const existingTaskData = sessionManager.getPhaseData('tool1-task') || {};
-            const taskData = {
+            const taskData: any = {
                 ...existingTaskData,
                 participant_id: sessionManager.getParticipantData()?.participantId || existingTaskData.participant_id || '',
                 task_type: 'tool1' as const,
@@ -222,6 +259,16 @@ export default function Tool1ChatPage() {
                 completion_status: Object.keys(finalOutputSelected).length > 0 ? 'completed' : 'in_progress',
                 final_outputs: finalOutputSelected
             };
+            
+            // CRITICAL: Always preserve conversation_log from existingTaskData if it exists
+            // The spread operator above already includes it, but we explicitly ensure it's there
+            if (existingTaskData.conversation_log && Array.isArray(existingTaskData.conversation_log)) {
+                taskData.conversation_log = existingTaskData.conversation_log;
+            } else if (messages.length > 0) {
+                // Only use messages if there's no existing conversation_log
+                taskData.conversation_log = messages;
+            }
+            // If neither exists, conversation_log will be undefined, which is fine for new sessions
             
             try {
                 sessionManager.savePhaseData('tool1-task', taskData);

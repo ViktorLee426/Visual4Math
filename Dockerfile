@@ -63,6 +63,11 @@ RUN pip install --upgrade pip && \
 # Copy backend code to /app/backend
 COPY backend /app/backend
 
+# Copy icon directories (needed for manipulatives generation)
+COPY my_icons /app/my_icons
+COPY additional_icons /app/additional_icons
+COPY math2visual_repo /app/math2visual_repo
+
 # Ship the built frontend with the backend (serve static files from backend)
 # Create static directory and copy built frontend files
 RUN mkdir -p /app/backend/static && cp -r /app/frontend/dist/* /app/backend/static/

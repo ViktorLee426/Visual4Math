@@ -116,13 +116,27 @@ export default function Tool2LayoutPage() {
       sessionManager.updatePhase('tool2-task');
     }
 
-    // Start timer when entering task page
-    setStartTime(Date.now());
+    // Restore timer if it exists, otherwise start new timer
+    try {
+      const TIMER_KEY = 'task_timer_tool2-task';
+      const savedTimer = sessionStorage.getItem(TIMER_KEY);
+      if (savedTimer) {
+        const savedTime = parseInt(savedTimer, 10);
+        if (!isNaN(savedTime)) {
+          console.log('✅ Restored timer from previous session');
+          setStartTime(savedTime, 'tool2-task');
+        } else {
+          setStartTime(Date.now(), 'tool2-task');
+        }
+      } else {
+        setStartTime(Date.now(), 'tool2-task');
+      }
+    } catch (e) {
+      console.warn('Error restoring timer:', e);
+      setStartTime(Date.now(), 'tool2-task');
+    }
 
-    // Cleanup: clear timer when leaving
-    return () => {
-      setStartTime(null);
-    };
+    // Don't clear timer on unmount - keep it running
     
     // Load selected problem if available, otherwise default to Subtraction
     const taskData = sessionManager.getPhaseData('tool2-task');
@@ -133,8 +147,8 @@ export default function Tool2LayoutPage() {
     if (problem) {
       setSelectedProblemId(problemIdToUse);
       setCurrentProblem({
-        problemText: problem.problemText,
-        imageUrl: problem.imageUrl
+        problemText: problem!.problemText,
+        imageUrl: problem!.imageUrl
       });
       // Don't auto-fill text input - user should copy manually
       // Save default if not already saved

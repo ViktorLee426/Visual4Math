@@ -133,10 +133,10 @@ export default function Tool3PanelPage() {
   const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
   const [currentProblem, setCurrentProblem] = useState<{ problemText: string; imageUrl: string } | null>(null);
   const [finalOutputSelected, setFinalOutputSelected] = useState<Record<string, string>>({}); // Map: operation -> imageUrl
-  // Text properties for new text boxes
-  const [textFontSize, setTextFontSize] = useState(14);
-  const [textFontFamily, setTextFontFamily] = useState('Arial');
-  const [textColor, setTextColor] = useState('#000000');
+  // Text properties for new text boxes (currently unused but reserved for future features)
+  const [textFontSize] = useState(14);
+  const [textFontFamily] = useState('Arial');
+  const [textColor] = useState('#000000');
   
   // Timer context
   const { setStartTime } = useTaskTimer();
@@ -151,13 +151,27 @@ export default function Tool3PanelPage() {
       sessionManager.updatePhase('tool3-task');
     }
 
-    // Start timer when entering task page
-    setStartTime(Date.now());
+    // Restore timer if it exists, otherwise start new timer
+    try {
+      const TIMER_KEY = 'task_timer_tool3-task';
+      const savedTimer = sessionStorage.getItem(TIMER_KEY);
+      if (savedTimer) {
+        const savedTime = parseInt(savedTimer, 10);
+        if (!isNaN(savedTime)) {
+          console.log('✅ Restored timer from previous session');
+          setStartTime(savedTime, 'tool3-task');
+        } else {
+          setStartTime(Date.now(), 'tool3-task');
+        }
+      } else {
+        setStartTime(Date.now(), 'tool3-task');
+      }
+    } catch (e) {
+      console.warn('Error restoring timer:', e);
+      setStartTime(Date.now(), 'tool3-task');
+    }
 
-    // Cleanup: clear timer when leaving
-    return () => {
-      setStartTime(null);
-    };
+    // Don't clear timer on unmount - keep it running
 
     // Load selected problem if available, otherwise default to Multiplication
     const taskData = sessionManager.getPhaseData('tool3-task');
@@ -168,8 +182,8 @@ export default function Tool3PanelPage() {
     if (problem) {
       setSelectedProblemId(problemIdToUse);
       setCurrentProblem({
-        problemText: problem.problemText,
-        imageUrl: problem.imageUrl
+        problemText: problem!.problemText,
+        imageUrl: problem!.imageUrl
       });
       // Don't auto-fill text input - user should copy manually
       // Save default if not already saved
@@ -1364,7 +1378,7 @@ export default function Tool3PanelPage() {
                     return (
                       <div 
                         key={idx} 
-                        className={`relative border rounded overflow-hidden cursor-pointer transition-colors ${
+                        className={`relative border rounded overflow-hidden cursor-pointer transition-colors bg-gray-50 ${
                           selectedForOperation
                             ? 'border-green-500 hover:border-green-600'
                             : 'border-gray-200 hover:border-gray-400'
@@ -1372,8 +1386,16 @@ export default function Tool3PanelPage() {
                         onClick={()=>{
                           setViewingImageIndex(idx);
                         }}
+                        style={{ aspectRatio: '1' }}
                       >
-                        <img src={s.url} className="w-full h-auto" alt={`Saved image ${idx + 1}`} />
+                        <div className="p-2 h-full flex items-center justify-center">
+                          <img 
+                            src={s.url} 
+                            className="w-full h-full object-contain" 
+                            alt={`Saved image ${idx + 1}`}
+                            style={{ maxHeight: '100%' }}
+                          />
+                        </div>
                         {selectedForOperation && (
                           <div className="absolute top-1 right-1 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded">
                             ✓ {formatOp(selectedForOperation)}
@@ -1397,7 +1419,7 @@ export default function Tool3PanelPage() {
           onClick={() => setViewingImageIndex(null)}
         >
           <div 
-            className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center"
+            className="relative max-w-[99vw] max-h-[98vh] flex flex-col items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
@@ -1443,10 +1465,28 @@ export default function Tool3PanelPage() {
               </button>
             )}
             
-            {/* Image counter and selection */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg text-xs space-y-2">
+            {/* Image */}
+            <img 
+              src={snapshots[viewingImageIndex].url} 
+              alt={`Saved image ${viewingImageIndex + 1}`}
+              className="object-contain"
+              style={{ 
+                display: 'block',
+                WebkitUserSelect: 'none',
+                margin: 'auto',
+                backgroundColor: 'hsl(0, 0%, 90%)',
+                transition: 'background-color 300ms',
+                maxWidth: '99vw',
+                maxHeight: '96vh',
+                width: 'auto',
+                height: 'auto'
+              }}
+            />
+            
+            {/* Image counter and selection - moved below image */}
+            <div className="mt-4 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg text-xs space-y-2">
               {snapshots.length > 1 && (
-                <div>
+                <div className="text-center">
                   Image {viewingImageIndex + 1} of {snapshots.length}
                 </div>
               )}
@@ -1459,7 +1499,7 @@ export default function Tool3PanelPage() {
                       handleSelectFinalOutput(snapshots[viewingImageIndex].url, operation);
                     }
                   }}
-                  className="w-full mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
+                  className="w-full px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
                 >
                   {finalOutputSelected[getOperationFromProblemId(selectedProblemId)] === snapshots[viewingImageIndex].url
                     ? '✓ Selected for ' + getOperationFromProblemId(selectedProblemId)
@@ -1467,82 +1507,10 @@ export default function Tool3PanelPage() {
                 </button>
               )}
             </div>
-            
-            {/* Image */}
-            <img 
-              src={snapshots[viewingImageIndex].url} 
-              alt={`Saved image ${viewingImageIndex + 1}`}
-              className="max-w-full max-h-[90vh] object-contain"
-              style={{ 
-                display: 'block',
-                WebkitUserSelect: 'none',
-                margin: 'auto',
-                backgroundColor: 'hsl(0, 0%, 90%)',
-                transition: 'background-color 300ms'
-              }}
-            />
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function Draggable({ children, onDrag }: { children: React.ReactNode; onDrag: (dx:number,dy:number)=>void }) {
-  const onMouseDown = (e: React.MouseEvent<SVGElement>) => {
-    // Don't stop propagation - let child elements handle their own events
-    // But we still want to handle dragging
-    
-    const svg = e.currentTarget.ownerSVGElement;
-    if (!svg) return;
-    
-    // Get initial point in SVG coordinates
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return;
-    const startPoint = pt.matrixTransform(ctm.inverse());
-    
-    let isDragging = false;
-    
-    const move = (ev: MouseEvent) => {
-      // Get current point in SVG coordinates
-      pt.x = ev.clientX;
-      pt.y = ev.clientY;
-      const currentPoint = pt.matrixTransform(ctm.inverse());
-      
-      const dx = currentPoint.x - startPoint.x;
-      const dy = currentPoint.y - startPoint.y;
-      
-      // Only start dragging if moved more than 2 pixels
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        isDragging = true;
-      }
-      
-      if (isDragging) {
-        // Call onDrag with the delta in SVG coordinates
-        onDrag(dx, dy);
-        
-        // Update start point for next move
-        startPoint.x = currentPoint.x;
-        startPoint.y = currentPoint.y;
-      }
-    };
-    
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-    };
-    
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-  };
-  
-  return (
-    <g onMouseDown={onMouseDown} style={{ cursor: 'move', pointerEvents: 'all' }}>
-      {children}
-    </g>
   );
 }
 
