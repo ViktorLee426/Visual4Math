@@ -62,3 +62,6 @@ logs/
 *.tmp
 *.temp
 .cache/
+
+# User study videos (large files)
+user_study_videos/
