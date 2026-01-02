@@ -23,9 +23,7 @@ services:
     # Let's Encrypt ensures HTTPS for your deployment
     environment:
       VIRTUAL_HOST: 'visual4math.peachhub-cntr1.inf.ethz.ch'
-      VIRTUAL_PORT: '8000'
-      PROXY_READ_TIMEOUT: '300'  # 5 minutes - for long image editing operations
-      PROXY_SEND_TIMEOUT: '300'  # 5 minutes - for long image editing operations
+      VIRTUAL_PORT: '8000' 
       PROXY_CONNECT_TIMEOUT: '300'  # 5 minutes - connection timeout
       LETSENCRYPT_HOST: 'visual4math.peachhub-cntr1.inf.ethz.ch'
       LETSENCRYPT_EMAIL: 'zhengxli@ethz.ch'  # Update with appropriate email

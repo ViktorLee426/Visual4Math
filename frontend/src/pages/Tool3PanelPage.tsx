@@ -111,15 +111,19 @@ type Elem = {
   iconColor?: string;
   borderColor?: string;
   borderWidth?: number;
+  rotation?: number; // Rotation angle in degrees
 };
 
 export default function Tool3PanelPage() {
   const navigate = useNavigate();
   const [elems, setElems] = useState<Elem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set()); // Multi-select support
+  const [selectionRect, setSelectionRect] = useState<{x1: number, y1: number, x2: number, y2: number} | null>(null);
   // zoom (pan removed)
   const [scale, setScale] = useState(1);
   const svgRef = useRef<SVGSVGElement>(null);
+  const rafIdRef = useRef<number | null>(null); // For smooth animation
   // undo/redo
   const [undoStack, setUndoStack] = useState<Elem[][]>([]);
   const [redoStack, setRedoStack] = useState<Elem[][]>([]);
@@ -246,25 +250,14 @@ export default function Tool3PanelPage() {
 
   // Clean icon display name: remove myicon- prefix and trailing -number patterns
   const getIconDisplayName = (iconName: string): string => {
-    // Remove myicon- or heroicon- prefix
-    let displayName = iconName.replace(/^(myicon-|heroicon-)/, '');
+    // Remove myicon- prefix
+    let displayName = iconName.replace(/^myicon-/, '');
     // Remove trailing -number pattern (e.g., "donut-2" -> "donut")
     displayName = displayName.replace(/-\d+$/, '');
     return displayName;
   };
 
-  // Get default icon keywords based on operation
-  const getDefaultIconKeywords = (operation: string): string[] => {
-    const keywords: Record<string, string[]> = {
-      'addition': ['myicon-strawberry', 'myicon-chocolate', 'myicon-ice-cream', 'myicon-add', 'myicon-addition', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
-      'subtraction': ['myicon-donut', 'myicon-plate', 'myicon-boy', 'myicon-ate', 'myicon-subtract', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
-      'multiplication': ['myicon-cupcake', 'myicon-tray', 'myicon-multiply', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
-      'division': ['myicon-cupcake', 'myicon-plate', 'myicon-divide', 'myicon-division', 'myicon-equal', 'myicon-question', 'myicon-rectangle', 'myicon-rect', 'myicon-circle'],
-    };
-    return keywords[operation] || [];
-  };
-
-  // Filter icons to show: all my_icons + operation-specific icons + search matches
+  // Filter icons to show: only my_icons folder icons (no math2visual, no additional icons)
   const getFilteredIcons = (): SvgIcon[] => {
     if (svgIcons.length === 0) {
       return svgIcons;
@@ -272,45 +265,18 @@ export default function Tool3PanelPage() {
 
     const searchQuery = iconSearchQuery.toLowerCase().trim();
 
-    // If searching, show all matching icons
+    // Filter to only show icons from my_icons folder (myicon- prefix)
+    const myIcons = svgIcons.filter(icon => icon.name.startsWith('myicon-'));
+
+    // If searching, show only matching my_icons
     if (searchQuery) {
-      return svgIcons.filter(icon => 
+      return myIcons.filter(icon => 
         icon.name.toLowerCase().includes(searchQuery)
       );
     }
 
-    // Otherwise, show: all my_icons + operation-specific icons + some common icons
-    const myIcons = svgIcons.filter(icon => icon.name.startsWith('myicon-'));
-    
-    // If no problem selected, just show my_icons + some common ones
-    if (!selectedProblemId) {
-      const commonIcons = svgIcons
-        .filter(icon => !icon.name.startsWith('myicon-') && !icon.name.startsWith('heroicon-'))
-        .slice(0, 20);
-      return [...myIcons, ...commonIcons];
-    }
-
-    const operation = getOperationFromProblemId(selectedProblemId);
-    const defaultKeywords = getDefaultIconKeywords(operation);
-    
-    // Get operation-specific icons (these might overlap with myIcons, but that's fine)
-    const defaultIcons = svgIcons.filter(icon => 
-      defaultKeywords.some(keyword => icon.name.toLowerCase().includes(keyword.toLowerCase()))
-    );
-    
-    // Add some common icons from other datasets (limit to 20)
-    const commonIcons = svgIcons
-      .filter(icon => !icon.name.startsWith('myicon-') && !icon.name.startsWith('heroicon-'))
-      .slice(0, 20);
-
-    // Combine: all my_icons first, then operation-specific, then common
-    // Remove duplicates (keep first occurrence)
-    const combined = [...myIcons, ...defaultIcons, ...commonIcons];
-    const unique = combined.filter((icon, index, self) => 
-      index === self.findIndex(i => i.name === icon.name)
-    );
-    
-    return unique;
+    // Otherwise, show all my_icons
+    return myIcons;
   };
   
   // Handle selecting/unselecting final output for a specific operation
@@ -360,60 +326,239 @@ export default function Tool3PanelPage() {
       kind: 'text', 
       x: 100, 
       y: 100, 
-      w: 160, 
-      h: 40, 
+      w: 120, 
+      h: 120, 
       text: 'Text',
       fontSize: textFontSize,
       fontFamily: textFontFamily,
       textColor: textColor,
       borderColor: '#cccccc',
-      borderWidth: 1
+      borderWidth: 1,
+      rotation: 0
     }]);
   };
   const addIcon = (svg: string) => {
     pushHistory(elems);
     const id = `e_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-    setElems([...elems, { id, kind: 'icon', x: 120, y: 120, w: 80, h: 80, svg }]);
+    setElems([...elems, { id, kind: 'icon', x: 120, y: 120, w: 80, h: 80, svg, rotation: 0 }]);
   };
   const addIconAt = (svg: string, x:number, y:number) => {
     pushHistory(elems);
     const id = `e_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-    setElems([...elems, { id, kind: 'icon', x, y, w: 80, h: 80, svg }]);
+    setElems([...elems, { id, kind: 'icon', x, y, w: 80, h: 80, svg, rotation: 0 }]);
   };
 
+  // Track if we're currently dragging/resizing/rotating to save state on mouseup
+  const isDraggingRef = useRef(false);
+  const dragStartStateRef = useRef<Elem[] | null>(null);
+
   const onDrag = (id: string, dx: number, dy: number) => {
-    setElems(prevElems => prevElems.map(e => e.id===id ? { ...e, x: e.x + dx, y: e.y + dy } : e));
+    // Save state on drag start
+    if (!isDraggingRef.current) {
+      isDraggingRef.current = true;
+      dragStartStateRef.current = elems.map(e => ({ ...e }));
+    }
+    
+    // Cancel any pending animation
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+    
+    // Use requestAnimationFrame for smooth updates
+    rafIdRef.current = requestAnimationFrame(() => {
+      setElems(prevElems => {
+        const isMultiSelect = selectedIds.has(id);
+        if (isMultiSelect) {
+          // Move all selected elements together
+          return prevElems.map(e => 
+            selectedIds.has(e.id) ? { ...e, x: e.x + dx, y: e.y + dy } : e
+          );
+        } else {
+          return prevElems.map(e => e.id===id ? { ...e, x: e.x + dx, y: e.y + dy } : e);
+        }
+      });
+      rafIdRef.current = null;
+    });
   };
+  
+  const onDragEnd = () => {
+    if (isDraggingRef.current && dragStartStateRef.current) {
+      pushHistory(dragStartStateRef.current);
+      isDraggingRef.current = false;
+      dragStartStateRef.current = null;
+    }
+  };
+  const isResizingRef = useRef(false);
+  const resizeStartStateRef = useRef<Elem[] | null>(null);
+  
   const onResize = (id: string, dx: number, dy: number, corner: 'nw'|'ne'|'sw'|'se') => {
-    setElems(elems.map(e => {
+    // Save state on resize start
+    if (!isResizingRef.current) {
+      isResizingRef.current = true;
+      resizeStartStateRef.current = elems.map(e => ({ ...e }));
+    }
+    
+    // Cancel any pending animation
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+    
+    rafIdRef.current = requestAnimationFrame(() => {
+      setElems(prevElems => {
+        const isMultiSelect = selectedIds.has(id) && selectedIds.size > 1;
+        
+        if (isMultiSelect) {
+          // Multi-resize: calculate bounding box of all selected elements
+          const selected = prevElems.filter(e => selectedIds.has(e.id));
+          if (selected.length === 0) return prevElems;
+          
+          let minX = Math.min(...selected.map(e => e.x));
+          let minY = Math.min(...selected.map(e => e.y));
+          let maxX = Math.max(...selected.map(e => e.x + e.w));
+          let maxY = Math.max(...selected.map(e => e.y + e.h));
+          
+          const oldWidth = maxX - minX;
+          const oldHeight = maxY - minY;
+          const minSize = 20;
+          
+          let newWidth = oldWidth, newHeight = oldHeight, offsetX = 0, offsetY = 0;
+          
+          if (corner === 'nw') {
+            newWidth = Math.max(minSize, oldWidth - dx/scale);
+            newHeight = Math.max(minSize, oldHeight - dy/scale);
+            offsetX = oldWidth - newWidth;
+            offsetY = oldHeight - newHeight;
+          } else if (corner === 'ne') {
+            newWidth = Math.max(minSize, oldWidth + dx/scale);
+            newHeight = Math.max(minSize, oldHeight - dy/scale);
+            offsetY = oldHeight - newHeight;
+          } else if (corner === 'sw') {
+            newWidth = Math.max(minSize, oldWidth - dx/scale);
+            newHeight = Math.max(minSize, oldHeight + dy/scale);
+            offsetX = oldWidth - newWidth;
+          } else if (corner === 'se') {
+            newWidth = Math.max(minSize, oldWidth + dx/scale);
+            newHeight = Math.max(minSize, oldHeight + dy/scale);
+          }
+          
+          const scaleX = newWidth / oldWidth;
+          const scaleY = newHeight / oldHeight;
+          
+          // Apply scaling to all selected elements
+          return prevElems.map(e => {
+            if (!selectedIds.has(e.id)) return e;
+            const relX = e.x - minX;
+            const relY = e.y - minY;
+            return {
+              ...e,
+              x: minX + relX * scaleX + offsetX,
+              y: minY + relY * scaleY + offsetY,
+              w: e.w * scaleX,
+              h: e.h * scaleY,
+              fontSize: e.fontSize ? e.fontSize * scaleY : undefined
+            };
+          });
+        } else {
+          // Single element resize
+          return prevElems.map(e => {
       if (e.id !== id) return e;
       const minSize = 20;
       let newX = e.x, newY = e.y, newW = e.w, newH = e.h;
       
       if (corner === 'nw') {
-        // Top-left: adjust x, y, width, height
         newW = Math.max(minSize, e.w - dx/scale);
         newH = Math.max(minSize, e.h - dy/scale);
         newX = e.x + (e.w - newW);
         newY = e.y + (e.h - newH);
       } else if (corner === 'ne') {
-        // Top-right: adjust y, width, height
         newW = Math.max(minSize, e.w + dx/scale);
         newH = Math.max(minSize, e.h - dy/scale);
         newY = e.y + (e.h - newH);
       } else if (corner === 'sw') {
-        // Bottom-left: adjust x, width, height
         newW = Math.max(minSize, e.w - dx/scale);
         newH = Math.max(minSize, e.h + dy/scale);
         newX = e.x + (e.w - newW);
       } else if (corner === 'se') {
-        // Bottom-right: adjust width, height
         newW = Math.max(minSize, e.w + dx/scale);
         newH = Math.max(minSize, e.h + dy/scale);
       }
       
       return { ...e, x: newX, y: newY, w: newW, h: newH };
-    }));
+          });
+        }
+      });
+      rafIdRef.current = null;
+    });
+  };
+  
+  const onResizeEnd = () => {
+    if (isResizingRef.current && resizeStartStateRef.current) {
+      pushHistory(resizeStartStateRef.current);
+      isResizingRef.current = false;
+      resizeStartStateRef.current = null;
+    }
+  };
+  
+  const isRotatingRef = useRef(false);
+  const rotateStartStateRef = useRef<Elem[] | null>(null);
+  
+  const onRotate = (id: string, angleDelta: number) => {
+    // Save state on rotate start
+    if (!isRotatingRef.current) {
+      isRotatingRef.current = true;
+      rotateStartStateRef.current = elems.map(e => ({ ...e }));
+    }
+    
+    // Slow down rotation - reduce sensitivity by 60%
+    const slowedAngleDelta = angleDelta * 0.4;
+    
+    setElems(prevElems => {
+      const isMultiSelect = selectedIds.has(id) && selectedIds.size > 1;
+      if (isMultiSelect) {
+        // Rotate all selected elements around their center
+        const selected = prevElems.filter(e => selectedIds.has(e.id));
+        if (selected.length === 0) return prevElems;
+        
+        // Calculate center of all selected elements
+        let minX = Math.min(...selected.map(e => e.x));
+        let minY = Math.min(...selected.map(e => e.y));
+        let maxX = Math.max(...selected.map(e => e.x + e.w));
+        let maxY = Math.max(...selected.map(e => e.y + e.h));
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        
+        return prevElems.map(e => {
+          if (!selectedIds.has(e.id)) return e;
+          const elemCenterX = e.x + e.w / 2;
+          const elemCenterY = e.y + e.h / 2;
+          const dx = elemCenterX - centerX;
+          const dy = elemCenterY - centerY;
+          const angle = Math.atan2(dy, dx) + angleDelta * Math.PI / 180;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const newX = centerX + Math.cos(angle) * distance - e.w / 2;
+          const newY = centerY + Math.sin(angle) * distance - e.h / 2;
+          return {
+            ...e,
+            x: newX,
+            y: newY,
+            rotation: (e.rotation || 0) + angleDelta
+          };
+        });
+      } else {
+        return prevElems.map(e => {
+          if (e.id !== id) return e;
+          return { ...e, rotation: (e.rotation || 0) + slowedAngleDelta };
+        });
+      }
+    });
+  };
+  
+  const onRotateEnd = () => {
+    if (isRotatingRef.current && rotateStartStateRef.current) {
+      pushHistory(rotateStartStateRef.current);
+      isRotatingRef.current = false;
+      rotateStartStateRef.current = null;
+    }
   };
 
   // Function to modify SVG colors
@@ -504,24 +649,31 @@ export default function Tool3PanelPage() {
       
       // Convert formal visual elements to Elem[] format
       // Elements can be: "icon" or "text"
-      const layout: Elem[] = [];
+      // Calculate bounding box of all elements first to check if we need to scale
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const tempLayout: Elem[] = [];
       
       for (const elem of response.elements) {
         if (elem.type === 'icon' && elem.svg_content) {
-          // Icon element (items, operators, equals, question mark)
-          layout.push({
+          // Icon element - use default size (80x80) instead of API size to match manual icons
+          tempLayout.push({
             id: elem.id,
             kind: 'icon' as const,
             x: elem.x,
             y: elem.y,
-            w: elem.w,
-            h: elem.h,
+            w: 80, // Use default size instead of elem.w
+            h: 80, // Use default size instead of elem.h
             svg: elem.svg_content,
-            text: elem.count ? `${elem.label} (${elem.count})` : elem.label
+            text: elem.count ? `${elem.label} (${elem.count})` : elem.label,
+            rotation: 0
           });
+          minX = Math.min(minX, elem.x);
+          minY = Math.min(minY, elem.y);
+          maxX = Math.max(maxX, elem.x + 80);
+          maxY = Math.max(maxY, elem.y + 80);
         } else if (elem.type === 'text') {
           // Text element (multipliers, etc.)
-          layout.push({
+          tempLayout.push({
             id: elem.id,
             kind: 'text' as const,
             x: elem.x,
@@ -531,10 +683,53 @@ export default function Tool3PanelPage() {
             text: elem.label || '',
             fontSize: 14,
             fontFamily: 'Arial',
-            textColor: '#000000'
+            textColor: '#000000',
+            rotation: 0
           });
+          minX = Math.min(minX, elem.x);
+          minY = Math.min(minY, elem.y);
+          maxX = Math.max(maxX, elem.x + elem.w);
+          maxY = Math.max(maxY, elem.y + elem.h);
         }
       }
+      
+      // Auto-fit: Check if content is too wide for canvas (assuming canvas width ~800px at scale 1)
+      // Get actual canvas dimensions
+      const canvasWidth = svgRef.current?.clientWidth || 800;
+      const canvasHeight = svgRef.current?.clientHeight || 520;
+      const contentWidth = maxX - minX;
+      const contentHeight = maxY - minY;
+      
+      // Calculate scale needed to fit content within canvas (with 20px padding)
+      const scaleX = (canvasWidth - 40) / contentWidth;
+      const scaleY = (canvasHeight - 40) / contentHeight;
+      const fitScale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
+      
+      // If content is too wide/tall, scale and center it
+      if (fitScale < 1 && tempLayout.length > 0) {
+        const scaledContentWidth = contentWidth * fitScale;
+        const scaledContentHeight = contentHeight * fitScale;
+        const offsetX = (canvasWidth - scaledContentWidth) / 2 - minX * fitScale;
+        const offsetY = (canvasHeight - scaledContentHeight) / 2 - minY * fitScale;
+        
+        // Apply scaling and centering to all elements
+        tempLayout.forEach(e => {
+          e.x = e.x * fitScale + offsetX;
+          e.y = e.y * fitScale + offsetY;
+          if (e.kind === 'icon') {
+            e.w = e.w * fitScale;
+            e.h = e.h * fitScale;
+          } else {
+            e.w = e.w * fitScale;
+            e.h = e.h * fitScale;
+            if (e.fontSize) {
+              e.fontSize = e.fontSize * fitScale;
+            }
+          }
+        });
+      }
+      
+      const layout = tempLayout;
       
       console.log(`✅ Parsed ${layout.length} formal visual elements`);
       
@@ -584,9 +779,19 @@ export default function Tool3PanelPage() {
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (!mod) return;
       
-      if (e.key.toLowerCase()==='z') { // undo
+      if (e.key.toLowerCase()==='z') { // undo or redo
         if (!isInputElement && !isTextSelectable) {
           e.preventDefault();
+          if (e.shiftKey) {
+            // Ctrl+Shift+Z or Cmd+Shift+Z = Redo
+            if (redoStack.length) {
+              const next = redoStack[0];
+              setRedoStack(s=>s.slice(1));
+              setUndoStack(s=>[...s, elems].slice(-50));
+              setElems(next);
+            }
+          } else {
+            // Ctrl+Z or Cmd+Z = Undo
           if (undoStack.length) {
             const prev = undoStack[undoStack.length-1];
             setUndoStack(s=>s.slice(0,-1));
@@ -594,7 +799,8 @@ export default function Tool3PanelPage() {
             setElems(prev);
           }
         }
-      } else if (e.key.toLowerCase()==='y') { // redo
+        }
+      } else if (e.key.toLowerCase()==='y') { // redo (alternative)
         if (!isInputElement && !isTextSelectable) {
           e.preventDefault();
           if (redoStack.length) {
@@ -639,27 +845,37 @@ export default function Tool3PanelPage() {
       const target = e.target as HTMLElement;
       const isInputElement = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
       
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && !isInputElement) {
         // Only delete if there's no text selection (user wants to delete element, not text)
         const selection = window.getSelection();
         const hasTextSelection = selection ? selection.toString().length > 0 : false;
-        if (!hasTextSelection) {
+      
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isInputElement && !hasTextSelection) {
+        // Check if we have multiple items selected
+        if (selectedIds.size > 1) {
+          e.preventDefault();
+          pushHistory(elems);
+          setElems(prev => prev.filter(el => !selectedIds.has(el.id)));
+          setSelectedIds(new Set());
+          setSelectedId(null);
+        } else if (selectedId) {
+          // Single item selected
           e.preventDefault();
           pushHistory(elems);
           setElems(prev => prev.filter(el => el.id !== selectedId));
           setSelectedId(null);
+          setSelectedIds(new Set());
         }
       }
     };
     window.addEventListener('keydown', handler);
     window.addEventListener('keydown', delHandler);
     return () => { window.removeEventListener('keydown', handler); window.removeEventListener('keydown', delHandler); };
-  }, [elems, selectedId, undoStack, redoStack, copyBuffer]);
+  }, [elems, selectedId, selectedIds, undoStack, redoStack, copyBuffer]);
 
-  // export current canvas to PNG (cropped and centered around elements)
+  // export current canvas to PNG - captures exactly what's shown on screen
   const exportCanvasToPng = async (): Promise<string> => {
-    if (elems.length === 0) {
-      // If no elements, return a small white image
+    if (!svgRef.current) {
+      // Fallback: return white image if SVG ref not available
       const canvas = document.createElement('canvas');
       canvas.width = 100; canvas.height = 100;
       const ctx = canvas.getContext('2d')!;
@@ -668,118 +884,112 @@ export default function Tool3PanelPage() {
       return canvas.toDataURL('image/png');
     }
 
-    // Calculate bounding box of all elements
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // Clone the actual SVG element to avoid modifying the original
+    const svgElement = svgRef.current;
+    const clonedSvg = svgElement.cloneNode(true) as SVGSVGElement;
     
-    elems.forEach(e => {
-      if (e.kind === 'icon' && e.svg) {
-        minX = Math.min(minX, e.x);
-        minY = Math.min(minY, e.y);
-        maxX = Math.max(maxX, e.x + e.w);
-        maxY = Math.max(maxY, e.y + e.h);
-      } else if (e.kind === 'text') {
-        // Text elements have padding (x-4, y-16)
-        minX = Math.min(minX, e.x - 4);
-        minY = Math.min(minY, e.y - 16);
-        maxX = Math.max(maxX, e.x - 4 + e.w);
-        maxY = Math.max(maxY, e.y - 16 + e.h);
-      }
-    });
-
-    // Calculate content dimensions
-    const contentWidth = maxX - minX;
-    const contentHeight = maxY - minY;
-    
-    // Add minimal padding (5% on each side, minimum 15px) - just enough to cover elements
-    const padding = Math.max(15, Math.max(contentWidth * 0.05, contentHeight * 0.05));
-    
-    // Use rectangular canvas with natural aspect ratio
-    const canvasWidth = contentWidth + padding * 2;
-    const canvasHeight = contentHeight + padding * 2;
-
-    // Calculate offset to center elements
-    const offsetX = padding - minX;
-    const offsetY = padding - minY;
-
-    // Create SVG with rectangular dimensions (preserving aspect ratio)
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('width', String(Math.ceil(canvasWidth)));
-    svg.setAttribute('height', String(Math.ceil(canvasHeight)));
-    svg.setAttribute('viewBox', `0 0 ${Math.ceil(canvasWidth)} ${Math.ceil(canvasHeight)}`);
-    const g = document.createElementNS(svg.namespaceURI, 'g');
-    g.setAttribute('transform', `translate(${offsetX},${offsetY}) scale(1)`);
-    svg.appendChild(g);
-    
-    elems.forEach(e => {
-      if (e.kind === 'icon' && e.svg) {
-        const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-        img.setAttribute('href', `data:image/svg+xml;utf8,${encodeURIComponent(e.svg)}`);
-        img.setAttribute('x', String(e.x)); img.setAttribute('y', String(e.y));
-        img.setAttribute('width', String(e.w)); img.setAttribute('height', String(e.h));
-        g.appendChild(img);
-      } else if (e.kind === 'text') {
-        const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        r.setAttribute('x', String(e.x-4)); r.setAttribute('y', String(e.y-16));
-        r.setAttribute('width', String(e.w)); r.setAttribute('height', String(e.h));
-        r.setAttribute('rx', '6'); 
-        r.setAttribute('fill', 'white'); 
-        r.setAttribute('fill-opacity', '0.8');
-        r.setAttribute('stroke', e.borderColor || '#cccccc');
-        r.setAttribute('stroke-width', String(e.borderWidth ?? 1));
-        g.appendChild(r);
-        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        const fontSize = e.fontSize || 14;
-        const boxTop = e.y - 16;
-        const textPadding = 4;
-        const textStartY = boxTop + textPadding + fontSize; // Match the rendering logic
-        t.setAttribute('x', String(e.x + e.w/2)); 
-        t.setAttribute('y', String(textStartY));
-        t.setAttribute('font-size', String(fontSize)); 
-        t.setAttribute('font-family', e.fontFamily || 'Arial');
-        t.setAttribute('fill', e.textColor || '#000000');
-        t.setAttribute('text-anchor', 'middle');
-        t.setAttribute('dominant-baseline', 'hanging');
-        
-        // Apply word wrapping using the same logic as display
-        const textLines = wrapText(e.text || '', e.w, fontSize, textPadding);
-        const lineHeight = fontSize * 1.2;
-        textLines.forEach((line, idx) => {
-          const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-          tspan.setAttribute('x', String(e.x + e.w/2));
-          tspan.setAttribute('dy', idx === 0 ? '0' : String(lineHeight));
-          tspan.textContent = line || '\u00A0'; // Use non-breaking space for empty lines
-          t.appendChild(tspan);
+    // Remove selection rectangles, handles, and other UI elements that shouldn't be in the export
+    const removeElements = (element: Element) => {
+      // Remove selection rectangles (dashed borders) - any rect with stroke-dasharray
+      const allRects = element.querySelectorAll('rect');
+      allRects.forEach(rect => {
+        const strokeDash = rect.getAttribute('stroke-dasharray');
+        const fill = rect.getAttribute('fill');
+        // Remove selection rectangles (dashed borders with no fill or transparent fill)
+        if (strokeDash && (fill === 'none' || fill === 'rgba(59, 130, 246, 0.5)' || !fill)) {
+          rect.remove();
+        }
+      });
+      
+      // Remove selection rectangle fill (semi-transparent blue)
+      const selectionFills = element.querySelectorAll('rect[fill="rgba(59, 130, 246, 0.1)"]');
+      selectionFills.forEach(rect => rect.remove());
+      
+      // Remove corner handles (circles used for resizing)
+      const handles = element.querySelectorAll('circle');
+      handles.forEach(handle => {
+        const fill = handle.getAttribute('fill');
+        const stroke = handle.getAttribute('stroke');
+        // Remove white circles with blue stroke (corner handles) or blue circles (rotation handles)
+        if (fill === 'white' || fill === 'rgba(59, 130, 246, 1)' || stroke === 'rgba(59, 130, 246, 1)') {
+          handle.remove();
+        }
+      });
+      
+      // Remove rotation handles (lines above elements)
+      const lines = element.querySelectorAll('line');
+      lines.forEach(line => {
+        const stroke = line.getAttribute('stroke');
+        if (stroke && stroke.includes('59, 130, 246')) {
+          line.remove();
+        }
+      });
+      
+      // Remove any foreignObject elements (editing textareas)
+      const foreignObjects = element.querySelectorAll('foreignObject');
+      foreignObjects.forEach(fo => fo.remove());
+      
+      // Remove empty groups that might have been used for UI
+      const groups = element.querySelectorAll('g');
+      groups.forEach(group => {
+        const children = Array.from(group.children);
+        const hasOnlyUI = children.every(child => {
+          const tag = child.tagName.toLowerCase();
+          if (tag === 'rect' && (child.getAttribute('stroke-dasharray') || child.getAttribute('fill') === 'none')) return true;
+          if (tag === 'circle' && (child.getAttribute('fill') === 'white' || child.getAttribute('fill') === 'rgba(59, 130, 246, 1)')) return true;
+          if (tag === 'line' && child.getAttribute('stroke')?.includes('59, 130, 246')) return true;
+          return false;
         });
-        g.appendChild(t);
-        
-        // Update border color and width if specified
-        if (e.borderColor) {
-          r.setAttribute('stroke', e.borderColor);
+        if (hasOnlyUI && children.length > 0) {
+          group.remove();
         }
-        if (e.borderWidth !== undefined) {
-          r.setAttribute('stroke-width', String(e.borderWidth));
-        }
-      }
-    });
+      });
+    };
     
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml;charset=utf-8' });
+    // Remove UI elements from cloned SVG
+    removeElements(clonedSvg);
+    
+    // Get the actual dimensions of the visible SVG
+    const rect = svgElement.getBoundingClientRect();
+    const svgWidth = Math.ceil(rect.width);
+    const svgHeight = Math.ceil(rect.height);
+    
+    // Set cloned SVG dimensions
+    clonedSvg.setAttribute('width', String(svgWidth));
+    clonedSvg.setAttribute('height', String(svgHeight));
+    clonedSvg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+    
+    // Serialize to SVG string
+    const svgString = new XMLSerializer().serializeToString(clonedSvg);
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
+    
+    // Convert to PNG
     const img = new Image();
-    const pngUrl: string = await new Promise((resolve) => {
+    const pngUrl: string = await new Promise((resolve, reject) => {
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = Math.ceil(canvasWidth);
-        canvas.height = Math.ceil(canvasHeight);
+        canvas.width = svgWidth;
+        canvas.height = svgHeight;
         const ctx = canvas.getContext('2d')!;
+        
+        // Fill with white background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the SVG image
         ctx.drawImage(img, 0, 0);
+        
         resolve(canvas.toDataURL('image/png'));
         URL.revokeObjectURL(url);
       };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to load SVG image'));
+      };
       img.src = url;
     });
+    
     return pngUrl;
   };
 
@@ -943,11 +1153,10 @@ export default function Tool3PanelPage() {
                 <button 
                   className="px-2 py-0.5 border border-red-300 rounded text-red-600 hover:bg-red-50 transition-colors" 
                   onClick={()=>{
-                    if (confirm('Are you sure you want to clear the entire canvas? This cannot be undone.')) {
                       pushHistory(elems);
                       setElems([]);
                       setSelectedId(null);
-                    }
+                    setSelectedIds(new Set());
                   }}
                   title="Clear Canvas"
                 >
@@ -994,6 +1203,64 @@ export default function Tool3PanelPage() {
                 // Only deselect if clicking on SVG itself or the transform group (not on images, rects, text, or circles)
                 if (target === svgRef.current || (target.tagName === 'g' && target === svgRef.current?.querySelector('g'))) {
                   setSelectedId(null);
+                  setSelectedIds(new Set());
+                }
+              }}
+              onMouseDown={(e)=>{
+                // Start rectangle selection if clicking on empty canvas
+                const target = e.target as Element;
+                if (target === svgRef.current || (target.tagName === 'g' && target === svgRef.current?.querySelector('g'))) {
+                  if (!svgRef.current) return;
+                  const rect = svgRef.current.getBoundingClientRect();
+                  const startX = (e.clientX - rect.left) / scale;
+                  const startY = (e.clientY - rect.top) / scale;
+                  let currentRect = { x1: startX, y1: startY, x2: startX, y2: startY };
+                  setSelectionRect(currentRect);
+                  
+                  const move = (moveEv: MouseEvent) => {
+                    if (!svgRef.current) return;
+                    const rect = svgRef.current.getBoundingClientRect();
+                    const currentX = (moveEv.clientX - rect.left) / scale;
+                    const currentY = (moveEv.clientY - rect.top) / scale;
+                    currentRect = { x1: startX, y1: startY, x2: currentX, y2: currentY };
+                    setSelectionRect(currentRect);
+                  };
+                  
+                  const up = () => {
+                    if (!svgRef.current) return;
+                    // Find all elements within selection rectangle
+                    const minX = Math.min(currentRect.x1, currentRect.x2);
+                    const maxX = Math.max(currentRect.x1, currentRect.x2);
+                    const minY = Math.min(currentRect.y1, currentRect.y2);
+                    const maxY = Math.max(currentRect.y1, currentRect.y2);
+                    
+                    const selected = elems.filter(e => {
+                      if (e.kind === 'icon') {
+                        return e.x < maxX && e.x + e.w > minX && e.y < maxY && e.y + e.h > minY;
+                      } else {
+                        return e.x - 4 < maxX && e.x - 4 + e.w > minX && e.y - 16 < maxY && e.y - 16 + e.h > minY;
+                      }
+                    }).map(e => e.id);
+                    
+                    if (selected.length > 0) {
+                      setSelectedIds(new Set(selected));
+                      if (selected.length === 1) {
+                        setSelectedId(selected[0]);
+                      } else {
+                        setSelectedId(null);
+                      }
+                    } else {
+                      setSelectedIds(new Set());
+                      setSelectedId(null);
+                    }
+                    
+                    setSelectionRect(null);
+                    window.removeEventListener('mousemove', move);
+                    window.removeEventListener('mouseup', up);
+                  };
+                  
+                  window.addEventListener('mousemove', move);
+                  window.addEventListener('mouseup', up);
                 }
               }}
               onDragOver={(e)=>{e.preventDefault(); e.stopPropagation();}}
@@ -1009,11 +1276,47 @@ export default function Tool3PanelPage() {
               }}
             >
               <g transform={`scale(${scale})`}>
+              {/* Selection rectangle */}
+              {selectionRect && (
+                <rect
+                  x={Math.min(selectionRect.x1, selectionRect.x2)}
+                  y={Math.min(selectionRect.y1, selectionRect.y2)}
+                  width={Math.abs(selectionRect.x2 - selectionRect.x1)}
+                  height={Math.abs(selectionRect.y2 - selectionRect.y1)}
+                  fill="rgba(59, 130, 246, 0.1)"
+                  stroke="rgba(59, 130, 246, 0.5)"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+              )}
               {elems.map(e => {
+                const isSelected = selectedId === e.id || selectedIds.has(e.id);
+                const rotation = e.rotation || 0;
+                
                 if (e.kind === 'icon' && e.svg) {
-                  const handleMouseDown = (ev: React.MouseEvent<SVGImageElement>) => {
+                  const handleMouseDown = (ev: React.MouseEvent<SVGImageElement | SVGGElement>) => {
                     ev.stopPropagation();
+                    if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
+                      // Multi-select: toggle selection
+                      setSelectedIds(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(e.id)) {
+                          newSet.delete(e.id);
+                          if (newSet.size === 1) {
+                            setSelectedId(Array.from(newSet)[0]);
+                          } else {
+                            setSelectedId(null);
+                          }
+                        } else {
+                          newSet.add(e.id);
+                          setSelectedId(null);
+                        }
+                        return newSet;
+                      });
+                    } else {
                     setSelectedId(e.id);
+                      setSelectedIds(new Set([e.id]));
+                    }
                     
                     const svg = ev.currentTarget.ownerSVGElement;
                     if (!svg) return;
@@ -1033,14 +1336,14 @@ export default function Tool3PanelPage() {
                       const dx = currentPoint.x - startPoint.x;
                       const dy = currentPoint.y - startPoint.y;
                       
-                      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+                      // Remove threshold for smoother movement
                         onDrag(e.id, dx, dy);
                         startPoint.x = currentPoint.x;
                         startPoint.y = currentPoint.y;
-                      }
                     };
                     
                     const up = () => {
+                      onDragEnd(); // Save state to undo stack
                       window.removeEventListener('mousemove', move);
                       window.removeEventListener('mouseup', up);
                     };
@@ -1049,8 +1352,11 @@ export default function Tool3PanelPage() {
                     window.addEventListener('mouseup', up);
                   };
                   
+                  const cx = e.x + e.w / 2;
+                  const cy = e.y + e.h / 2;
+                  
                   return (
-                    <g key={e.id}>
+                    <g key={e.id} transform={rotation !== 0 ? `translate(${cx},${cy}) rotate(${rotation}) translate(${-cx},${-cy})` : undefined}>
                       <image 
                         href={`data:image/svg+xml;utf8,${encodeURIComponent(
                           e.iconColor && e.svg ? modifySvgColor(e.svg, e.iconColor) : e.svg || ''
@@ -1064,17 +1370,35 @@ export default function Tool3PanelPage() {
                         data-id={e.id}
                         style={{ cursor: 'move' }}
                       />
-                      {selectedId === e.id && (
+                      {isSelected && (
                         <>
-                          <CornerHandle x={e.x} y={e.y} onResize={(dx,dy)=>onResize(e.id,dx,dy,'nw')} cursor="nwse-resize" />
-                          <CornerHandle x={e.x+e.w} y={e.y} onResize={(dx,dy)=>onResize(e.id,dx,dy,'ne')} cursor="nesw-resize" />
-                          <CornerHandle x={e.x} y={e.y+e.h} onResize={(dx,dy)=>onResize(e.id,dx,dy,'sw')} cursor="nesw-resize" />
-                          <CornerHandle x={e.x+e.w} y={e.y+e.h} onResize={(dx,dy)=>onResize(e.id,dx,dy,'se')} cursor="nwse-resize" />
+                          <rect
+                            x={e.x}
+                            y={e.y}
+                            width={e.w}
+                            height={e.h}
+                            fill="none"
+                            stroke="rgba(59, 130, 246, 0.5)"
+                            strokeWidth={1}
+                            strokeDasharray="4 4"
+                          />
+                          <CornerHandle x={e.x} y={e.y} onResize={(dx,dy)=>onResize(e.id,dx,dy,'nw')} onResizeEnd={onResizeEnd} cursor="nwse-resize" />
+                          <CornerHandle x={e.x+e.w} y={e.y} onResize={(dx,dy)=>onResize(e.id,dx,dy,'ne')} onResizeEnd={onResizeEnd} cursor="nesw-resize" />
+                          <CornerHandle x={e.x} y={e.y+e.h} onResize={(dx,dy)=>onResize(e.id,dx,dy,'sw')} onResizeEnd={onResizeEnd} cursor="nesw-resize" />
+                          <CornerHandle x={e.x+e.w} y={e.y+e.h} onResize={(dx,dy)=>onResize(e.id,dx,dy,'se')} onResizeEnd={onResizeEnd} cursor="nwse-resize" />
+                          {/* Rotation handle - positioned above the element */}
+                          <RotateHandle 
+                            x={cx} 
+                            y={e.y - 20} 
+                            onRotate={(angleDelta) => onRotate(e.id, angleDelta)}
+                            onRotateEnd={onRotateEnd}
+                          />
                         </>
                       )}
                     </g>
                   );
                 } else if (e.kind === 'text') {
+                  const isTextSelected = selectedId === e.id || selectedIds.has(e.id);
                   return (
                     <g key={e.id}>
                       <EditableText 
@@ -1088,12 +1412,18 @@ export default function Tool3PanelPage() {
                         textColor={e.textColor || '#000000'}
                         borderColor={e.borderColor || '#cccccc'}
                         borderWidth={e.borderWidth ?? 1}
+                        rotation={e.rotation || 0}
                         onChange={(t)=>setElems(prev=>prev.map(it=>it.id===e.id?{...it, text:t}:it))}
                         onPropertyChange={(props)=>setElems(prev=>prev.map(it=>it.id===e.id?{...it, ...props}:it))}
                         onResize={(dx,dy,corner)=>onResize(e.id,dx,dy,corner)} 
-                        onSelect={()=>setSelectedId(e.id)} 
-                        selected={selectedId === e.id}
+                        onResizeEnd={onResizeEnd}
+                        onSelect={()=>{
+                          setSelectedId(e.id);
+                          setSelectedIds(new Set([e.id]));
+                        }} 
+                        selected={isTextSelected}
                         onDrag={(dx,dy)=>onDrag(e.id,dx,dy)}
+                        onDragEnd={onDragEnd}
                       />
                     </g>
                   );
@@ -1514,12 +1844,20 @@ export default function Tool3PanelPage() {
   );
 }
 
-function CornerHandle({ x, y, onResize, cursor = 'nwse-resize' }: { x:number; y:number; onResize:(dx:number,dy:number)=>void; cursor?:string }) {
+function CornerHandle({ x, y, onResize, onResizeEnd, cursor = 'nwse-resize' }: { x:number; y:number; onResize:(dx:number,dy:number)=>void; onResizeEnd?:()=>void; cursor?:string }) {
   const onMouseDown = (e: React.MouseEvent<SVGCircleElement>) => {
     e.stopPropagation();
     const start = { x: e.clientX, y: e.clientY };
-    const move = (ev: MouseEvent) => onResize(ev.clientX - start.x, ev.clientY - start.y);
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    const move = (ev: MouseEvent) => {
+      onResize(ev.clientX - start.x, ev.clientY - start.y);
+      start.x = ev.clientX;
+      start.y = ev.clientY;
+    };
+    const up = () => {
+      onResizeEnd?.(); // Save state to undo stack
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
   };
   return (
@@ -1534,14 +1872,78 @@ function CornerHandle({ x, y, onResize, cursor = 'nwse-resize' }: { x:number; y:
   );
 }
 
+function RotateHandle({ x, y, onRotate, onRotateEnd }: { x: number; y: number; onRotate: (angleDelta: number) => void; onRotateEnd?: () => void }) {
+  const onMouseDown = (e: React.MouseEvent<SVGCircleElement>) => {
+    e.stopPropagation();
+    const svg = e.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    
+    const rect = svg.getBoundingClientRect();
+    const centerX = rect.left + x;
+    const centerY = rect.top + y;
+    const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+    let lastAngle = startAngle;
+    
+    const move = (ev: MouseEvent) => {
+      const currentAngle = Math.atan2(ev.clientY - centerY, ev.clientX - centerX);
+      let angleDelta = (currentAngle - lastAngle) * 180 / Math.PI;
+      // Normalize to -180 to 180 range
+      if (angleDelta > 180) angleDelta -= 360;
+      if (angleDelta < -180) angleDelta += 360;
+      if (Math.abs(angleDelta) > 0.5) { // Only update if significant change
+        onRotate(angleDelta);
+        lastAngle = currentAngle;
+      }
+    };
+    
+    const up = () => {
+      if (onRotateEnd) onRotateEnd(); // Save state to undo stack
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+  
+  return (
+    <g>
+      <line
+        x1={x}
+        y1={y}
+        x2={x}
+        y2={y + 15}
+        stroke="rgba(59, 130, 246, 0.5)"
+        strokeWidth={1}
+      />
+      <circle
+        cx={x}
+        cy={y}
+        r={6}
+        fill="white"
+        stroke="rgba(59, 130, 246, 1)"
+        strokeWidth={2}
+        onMouseDown={onMouseDown}
+        style={{ cursor: 'grab', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' }}
+      />
+      <circle
+        cx={x}
+        cy={y}
+        r={3}
+        fill="rgba(59, 130, 246, 1)"
+      />
+    </g>
+  );
+}
+
 function EditableText({ 
-  x, y, w, h, text, fontSize, fontFamily, textColor, borderColor, borderWidth, onChange, onPropertyChange, onResize, onSelect, selected, onDrag
+  x, y, w, h, text, fontSize, fontFamily, textColor, borderColor, borderWidth, rotation, onChange, onPropertyChange, onResize, onResizeEnd, onSelect, selected, onDrag, onDragEnd
 }: { 
   x:number; y:number; w:number; h:number; text:string; fontSize?:number; fontFamily?:string; textColor?:string; 
-  borderColor?:string; borderWidth?:number;
+  borderColor?:string; borderWidth?:number; rotation?:number;
   onChange:(t:string)=>void; onPropertyChange?:(props:{fontSize?:number; fontFamily?:string; textColor?:string})=>void;
-  onResize:(dx:number,dy:number,corner:'nw'|'ne'|'sw'|'se')=>void; onSelect?:()=>void; selected?:boolean;
-  onDrag?:(dx:number,dy:number)=>void;
+  onResize:(dx:number,dy:number,corner:'nw'|'ne'|'sw'|'se')=>void; onResizeEnd?:()=>void; onSelect?:()=>void; selected?:boolean;
+  onDrag?:(dx:number,dy:number)=>void; onDragEnd?:()=>void;
 }) {
   // onPropertyChange is available for future use (e.g., font size/color changes)
   void onPropertyChange;
@@ -1561,10 +1963,6 @@ function EditableText({
     }
   }, [text, isEditing]);
   
-  const onDblClick = () => {
-    setEditValue(text);
-    setIsEditing(true);
-  };
   
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -1587,7 +1985,9 @@ function EditableText({
       setIsEditing(false);
     }
     // Allow Enter for new lines (PowerPoint-like behavior)
+    // Allow Space - no need to prevent default, it works naturally
     // Shift+Enter also creates new line (default behavior)
+    // All other keys work normally in textarea
   };
   
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1614,11 +2014,16 @@ function EditableText({
   // This allows leading newlines/spaces to push text down naturally
   const textStartY = boxTop + textPadding + baseFontSize;
   
-  // Handle dragging similar to icons
+  // Handle clicking and dragging
   const handleMouseDown = (e: React.MouseEvent<SVGElement>) => {
     if (isEditing) return; // Don't drag while editing
     
     e.stopPropagation();
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      // Multi-select handled by parent
+      onSelect?.();
+      return;
+    }
     onSelect?.();
     
     if (!onDrag) return;
@@ -1632,6 +2037,7 @@ function EditableText({
     const ctm = svg.getScreenCTM();
     if (!ctm) return;
     const startPoint = pt.matrixTransform(ctm.inverse());
+    let hasMoved = false;
     
     const move = (moveEv: MouseEvent) => {
       pt.x = moveEv.clientX;
@@ -1641,7 +2047,15 @@ function EditableText({
       const dx = currentPoint.x - startPoint.x;
       const dy = currentPoint.y - startPoint.y;
       
-      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      // If moved more than 3 pixels, start dragging instead of editing
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        hasMoved = true;
+        if (isEditing) {
+          setIsEditing(false);
+        }
+      }
+      
+      if (hasMoved && onDrag) {
         onDrag(dx, dy);
         startPoint.x = currentPoint.x;
         startPoint.y = currentPoint.y;
@@ -1649,6 +2063,12 @@ function EditableText({
     };
     
     const up = () => {
+      if (!hasMoved && selected && !isEditing) {
+        // Single click without movement - start editing
+        setIsEditing(true);
+      } else if (hasMoved && onDragEnd) {
+        onDragEnd(); // Save state to undo stack
+      }
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
     };
@@ -1657,8 +2077,24 @@ function EditableText({
     window.addEventListener('mouseup', up);
   };
   
+  const rotationAngle = rotation || 0;
+  const cx = x + w / 2;
+  const cy = y + h / 2 - 8; // Adjust for text offset
+  
   return (
-    <>
+    <g transform={rotationAngle !== 0 ? `translate(${cx},${cy}) rotate(${rotationAngle}) translate(${-cx},${-cy})` : undefined}>
+      {selected && (
+        <rect
+          x={x-4}
+          y={y-16}
+          width={w}
+          height={h}
+          fill="none"
+          stroke="rgba(59, 130, 246, 0.5)"
+          strokeWidth={1}
+          strokeDasharray="4 4"
+        />
+      )}
       <rect 
         x={x-4} 
         y={y-16} 
@@ -1670,9 +2106,14 @@ function EditableText({
         fillOpacity="0.8"
         stroke={baseBorderColor}
         strokeWidth={baseBorderWidth}
-        onDoubleClick={onDblClick} 
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!isEditing && selected) {
+            setIsEditing(true);
+          }
+        }}
         onMouseDown={handleMouseDown} 
-        style={{ cursor: 'move' }} 
+        style={{ cursor: isEditing ? 'text' : 'move' }} 
       />
       {isEditing ? (
         <foreignObject x={x-4} y={boxTop} width={w} height={h}>
@@ -1682,7 +2123,7 @@ function EditableText({
             onChange={handleTextareaChange}
             onBlur={handleSubmit}
             onKeyDown={handleKeyDown}
-            className="w-full h-full text-sm border border-blue-500 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
+            className="w-full h-full text-sm border border-blue-500 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-auto"
             style={{ 
               fontSize: `${baseFontSize}px`,
               fontFamily: baseFontFamily,
@@ -1691,9 +2132,11 @@ function EditableText({
               padding: `${textPadding}px 4px`,
               margin: 0,
               boxSizing: 'border-box',
-              textAlign: 'center'
+              textAlign: 'center',
+              whiteSpace: 'pre-wrap',
+              wordWrap: 'break-word'
             }}
-            placeholder="Enter text (Enter for new line)"
+            autoFocus
           />
         </foreignObject>
       ) : (
@@ -1708,7 +2151,12 @@ function EditableText({
             fontFamily: baseFontFamily,
             fill: baseTextColor
           }} 
-          onDoubleClick={onDblClick} 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isEditing && selected) {
+              setIsEditing(true);
+            }
+          }}
           onMouseDown={handleMouseDown}
         >
           {textLines.map((line, idx) => (
@@ -1720,13 +2168,14 @@ function EditableText({
       )}
       {selected && (
         <>
-          <CornerHandle x={x-4} y={y-16} onResize={(dx,dy)=>onResize(dx,dy,'nw')} cursor="nwse-resize" />
-          <CornerHandle x={x-4+w} y={y-16} onResize={(dx,dy)=>onResize(dx,dy,'ne')} cursor="nesw-resize" />
-          <CornerHandle x={x-4} y={y-16+h} onResize={(dx,dy)=>onResize(dx,dy,'sw')} cursor="nesw-resize" />
-          <CornerHandle x={x-4+w} y={y-16+h} onResize={(dx,dy)=>onResize(dx,dy,'se')} cursor="nwse-resize" />
+          <CornerHandle x={x-4} y={y-16} onResize={(dx,dy)=>onResize(dx,dy,'nw')} onResizeEnd={onResizeEnd} cursor="nwse-resize" />
+          <CornerHandle x={x-4+w} y={y-16} onResize={(dx,dy)=>onResize(dx,dy,'ne')} onResizeEnd={onResizeEnd} cursor="nesw-resize" />
+          <CornerHandle x={x-4} y={y-16+h} onResize={(dx,dy)=>onResize(dx,dy,'sw')} onResizeEnd={onResizeEnd} cursor="nesw-resize" />
+          <CornerHandle x={x-4+w} y={y-16+h} onResize={(dx,dy)=>onResize(dx,dy,'se')} onResizeEnd={onResizeEnd} cursor="nwse-resize" />
+          {/* Text boxes don't have rotation handle */}
         </>
       )}
-    </>
+    </g>
   );
 }
 

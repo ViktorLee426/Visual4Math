@@ -79,6 +79,57 @@ const calculateTextSize = (text: string, minWidth: number = 50, minHeight: numbe
   return { w: boxWidth, h: height };
 };
 
+// Calculate compact text box size that fits all text (for proposed text boxes)
+// Makes it reasonably sized, not too big, and fits above other elements
+const calculateCompactTextSize = (text: string, fontSize: number = 16): { w: number; h: number } => {
+  if (!text) return { w: 300, h: 60 };
+  
+  const padding = 8;
+  const lineHeight = fontSize * 1.3;
+  const charWidth = fontSize * 0.55;
+  
+  // Maximum width to prevent it from being too wide (about 60% of canvas width)
+  const maxWidth = 480; // 60% of 800px canvas
+  const minWidth = 200;
+  
+  // Split by newlines first to preserve them
+  const newlineSplit = String(text).split('\n');
+  let allLines: string[] = [];
+  
+  // Calculate proper wrapping with max width constraint
+  const maxChars = Math.max(4, Math.floor((maxWidth - padding * 2) / charWidth));
+  
+  newlineSplit.forEach((nlLine) => {
+    if (!nlLine.trim()) {
+      allLines.push('');
+      return;
+    }
+    const words = nlLine.split(/\s+/);
+    let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > maxChars && line) {
+        allLines.push(line);
+        line = w;
+      } else {
+        line = test;
+      }
+    }
+    if (line) allLines.push(line);
+  });
+  
+  // Calculate width based on longest line
+  const longestLineLength = Math.max(...allLines.map(l => l.length), 4);
+  const calculatedWidth = Math.ceil(longestLineLength * charWidth + padding * 2);
+  const finalWidth = Math.max(minWidth, Math.min(maxWidth, calculatedWidth));
+  
+  // Calculate height based on number of lines
+  const numLines = allLines.length;
+  const finalHeight = Math.ceil(numLines * lineHeight + padding * 2);
+  
+  return { w: finalWidth, h: finalHeight };
+};
+
 export default function Tool2LayoutPage() {
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
@@ -288,6 +339,56 @@ export default function Tool2LayoutPage() {
     }
   };
 
+  // Keyboard shortcuts for undo/redo (similar to Tool C)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input/textarea
+      const target = e.target as HTMLElement;
+      const isInputElement = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      
+      // Check if target is inside a text-selectable element
+      const isTextSelectable = target.closest('.select-text') !== null || 
+                               target.classList.contains('select-text') ||
+                               getComputedStyle(target).userSelect === 'text';
+      
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC')>=0;
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod) return;
+      
+      if (e.key.toLowerCase()==='z') { // undo or redo
+        if (!isInputElement && !isTextSelectable) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            // Ctrl+Shift+Z or Cmd+Shift+Z = Redo
+            if (historyIndex < history.length - 1) {
+              const newIndex = historyIndex + 1;
+              setHistoryIndex(newIndex);
+              setNodes([...history[newIndex]]);
+            }
+          } else {
+            // Ctrl+Z or Cmd+Z = Undo
+            if (historyIndex > 0) {
+              const newIndex = historyIndex - 1;
+              setHistoryIndex(newIndex);
+              setNodes([...history[newIndex]]);
+            }
+          }
+        }
+      } else if (e.key.toLowerCase()==='y') { // redo (alternative)
+        if (!isInputElement && !isTextSelectable) {
+          e.preventDefault();
+          if (historyIndex < history.length - 1) {
+            const newIndex = historyIndex + 1;
+            setHistoryIndex(newIndex);
+            setNodes([...history[newIndex]]);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [historyIndex, history]);
+
 
   const addNode = (type: 'object' | 'text') => {
     const id = `n_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -419,10 +520,31 @@ export default function Tool2LayoutPage() {
           node.borderWidth = 2; // Thicker border
           node.textColor = '#000000'; // Black text
           node.fontSize = 16; // Default font size
-          // Auto-resize text boxes
-          const size = calculateTextSize(item.label || '');
+          // Use full problem text instead of concise label
+          const fullProblemText = prompt.trim() || currentProblem?.problemText || '';
+          node.label = fullProblemText || item.label || ''; // Use full problem text if available
+          // Calculate compact size that fits all text (not too big)
+          const size = calculateCompactTextSize(node.label, node.fontSize);
           node.w = size.w;
           node.h = size.h;
+          
+          // Find the highest y position of all other elements (non-text)
+          const otherItems = layoutItems.filter((it, i) => it.type !== 'text' || i !== idx);
+          const minOtherY = otherItems.length > 0 
+            ? Math.min(...otherItems.map(n => n.y))
+            : 200; // Default if no other elements
+          
+          // Position at center top, above all other elements
+          const canvasWidth = 800;
+          const topMargin = 20; // 20px from top
+          const spacing = 20; // Space between text box and other elements
+          node.x = (canvasWidth - size.w) / 2; // Center horizontally
+          // Position above other elements, or at top if no other elements
+          node.y = Math.min(topMargin, minOtherY - size.h - spacing);
+          // Ensure it doesn't go negative
+          if (node.y < topMargin) {
+            node.y = topMargin;
+          }
         }
         return node;
       });
@@ -1146,7 +1268,7 @@ export default function Tool2LayoutPage() {
                         return (
                           <div 
                             key={originalIdx}
-                            className={`relative rounded-lg overflow-hidden border-2 transition-colors cursor-pointer ${
+                            className={`relative rounded-lg overflow-hidden border-2 transition-colors cursor-pointer flex items-center justify-center ${
                               selectedForOperation
                                 ? 'border-green-500'
                                 : it.isPartial
@@ -1154,6 +1276,7 @@ export default function Tool2LayoutPage() {
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
                             onClick={() => it.url && setEnlargedImageIdx(originalIdx)}
+                            style={{ minHeight: '150px', maxHeight: '200px' }}
                           >
                             {!it.url ? (
                               // Placeholder with spinner when generating
@@ -1170,8 +1293,9 @@ export default function Tool2LayoutPage() {
                               <>
                                 <img 
                                   src={it.url} 
-                                  className="w-full h-auto" 
+                                  className="w-full h-full object-contain" 
                                   alt={`Generated ${originalIdx + 1}`} 
+                                  style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto' }}
                                 />
                                 {/* Spinner and timer overlay for partial images */}
                                 {it.isPartial && it.url && (
@@ -1283,12 +1407,13 @@ export default function Tool2LayoutPage() {
             )}
             
             {/* Image */}
-            <div className="p-4">
+            <div className="p-4 flex items-center justify-center">
               <img 
                 src={generationHistory[enlargedImageIdx].url} 
-                className="max-w-full max-h-[85vh] mx-auto rounded-lg" 
+                className="max-w-full max-h-[85vh] mx-auto rounded-lg object-contain" 
                 alt={`Generated image ${enlargedImageIdx + 1}`}
                 onClick={(e) => e.stopPropagation()}
+                style={{ width: 'auto', height: 'auto' }}
               />
             </div>
             

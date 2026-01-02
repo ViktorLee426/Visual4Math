@@ -1,7 +1,11 @@
-# backend/app/services/openai_service.py
+"""
+OpenAI service for chat and image generation.
+
+Handles communication with OpenAI API including GPT-4 Vision for text/image understanding
+and DALL-E for image generation.
+"""
 from openai import OpenAI
 import os
-# The `dotenv` package loads environment variables from a `.env` file into the environment.
 from dotenv import load_dotenv
 from typing import List, Optional
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse

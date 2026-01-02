@@ -45,6 +45,9 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
   const [scale, setScale] = useState(1);
   const [panning, setPanning] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef<LayoutNode[]>(nodes);
@@ -85,16 +88,16 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
       const contentWidth = maxX - minX;
       const contentHeight = maxY - minY;
 
-      // Add margins (20% padding on each side)
-      const marginPercent = 0.2;
+      // Add margins (25% padding on each side to ensure nothing is cut off)
+      const marginPercent = 0.25;
       const marginX = contentWidth * marginPercent;
       const marginY = contentHeight * marginPercent;
 
-      // Calculate new bounds with margins
+      // Calculate new bounds with margins - don't limit to canvas size, allow expansion
       const paddedMinX = Math.max(0, minX - marginX);
       const paddedMinY = Math.max(0, minY - marginY);
-      const paddedMaxX = Math.min(800, maxX + marginX);
-      const paddedMaxY = Math.min(600, maxY + marginY);
+      const paddedMaxX = maxX + marginX; // Allow expansion beyond canvas
+      const paddedMaxY = maxY + marginY; // Allow expansion beyond canvas
 
       // Calculate export dimensions
       const exportWidth = paddedMaxX - paddedMinX;
@@ -200,41 +203,176 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
     );
   };
 
+  // Helper function to calculate text box size
+  const calculateTextSize = (text: string, minWidth: number = 50, minHeight: number = 40): { w: number; h: number } => {
+    if (!text) return { w: minWidth, h: minHeight };
+    
+    const padding = 4;
+    const typicalFontSize = 14;
+    const lineHeight = typicalFontSize * 1.2;
+    
+    const maxChars = Math.max(4, Math.floor((minWidth - padding * 2) / (typicalFontSize * 0.55)));
+    const words = String(text).split(/\s+/);
+    let lines: string[] = [];
+    let line = '';
+    
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > maxChars) {
+        lines.push(line || w);
+        line = line ? w : '';
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    
+    // Account for newlines
+    const newlineSplit = text.split('\n');
+    if (newlineSplit.length > 1) {
+      lines = [];
+      newlineSplit.forEach(nl => {
+        const nlWords = nl.split(/\s+/);
+        let nlLine = '';
+        for (const w of nlWords) {
+          const test = nlLine ? nlLine + ' ' + w : w;
+          if (test.length > maxChars) {
+            lines.push(nlLine || w);
+            nlLine = nlLine ? w : '';
+          } else {
+            nlLine = test;
+          }
+        }
+        if (nlLine) lines.push(nlLine);
+      });
+    }
+    
+    const longestLine = Math.max(...lines.map(l => l.length), 4);
+    const charWidth = typicalFontSize * 0.55;
+    const boxWidth = Math.max(minWidth, Math.ceil(longestLine * charWidth + padding * 2));
+    
+    const actualMaxChars = Math.max(4, Math.floor((boxWidth - padding * 2) / (typicalFontSize * 0.55)));
+    lines = [];
+    line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (test.length > actualMaxChars) {
+        lines.push(line || w);
+        line = line ? w : '';
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    
+    // Account for newlines again with actual width
+    if (newlineSplit.length > 1) {
+      lines = [];
+      newlineSplit.forEach(nl => {
+        const nlWords = nl.split(/\s+/);
+        let nlLine = '';
+        for (const w of nlWords) {
+          const test = nlLine ? nlLine + ' ' + w : w;
+          if (test.length > actualMaxChars) {
+            lines.push(nlLine || w);
+            nlLine = nlLine ? w : '';
+          } else {
+            nlLine = test;
+          }
+        }
+        if (nlLine) lines.push(nlLine);
+      });
+    }
+    
+    const height = Math.max(minHeight, Math.ceil(lines.length * lineHeight + padding * 2));
+    
+    return { w: boxWidth, h: height };
+  };
+
   const handleMouseDownNode = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    
+    const node = nodes.find(n => n.id === id);
+    const isTextNode = node?.type === 'text';
+    const isSelected = selectedIds.length > 0 ? selectedIds.includes(id) : selectedId === id;
     
     // Normal selection and drag - selection is handled by parent via onSelect
     // Pass the event so parent can check for Ctrl/Cmd key
     onSelect && onSelect(id, e);
     containerRef.current?.focus(); // Focus canvas for keyboard shortcuts
+    
+    // If it's a text node and already selected, don't start drag immediately
+    // Wait to see if user wants to edit or drag
+    if (isTextNode && isSelected && editingNodeId !== id) {
+      const start = { x: e.clientX, y: e.clientY };
+      let hasMoved = false;
+      
+      const move = (ev: MouseEvent) => {
+        const dx = Math.abs(ev.clientX - start.x);
+        const dy = Math.abs(ev.clientY - start.y);
+        if (dx > 3 || dy > 3) { // Threshold to distinguish click from drag
+          hasMoved = true;
+          // Start drag operation
+          const startNodes = JSON.parse(JSON.stringify(nodes));
+          let currentId = id;
+          
+          const dragMove = (dragEv: MouseEvent) => {
+            onDrag(currentId, dragEv.clientX - start.x, dragEv.clientY - start.y);
+          };
+          const dragUp = () => {
+            const currentNodes = nodesRef.current;
+            const finalNodes = currentNodes.map((n: LayoutNode) => (n.id === currentId ? { ...n, x: snap(n.x), y: snap(n.y) } : n));
+            const changed = JSON.stringify(startNodes) !== JSON.stringify(finalNodes);
+            if (changed) {
+              onHistorySave && onHistorySave(finalNodes);
+              setNodes(finalNodes);
+            }
+            window.removeEventListener('mousemove', dragMove);
+            window.removeEventListener('mouseup', dragUp);
+          };
+          window.addEventListener('mousemove', dragMove);
+          window.addEventListener('mouseup', dragUp);
+          
+          // Remove the click handler
+          window.removeEventListener('mousemove', move);
+          window.removeEventListener('mouseup', up);
+        }
+      };
+      const up = () => {
+        // If text node and clicked without moving, start editing
+        if (!hasMoved && isTextNode && isSelected && editingNodeId !== id) {
+          setEditingNodeId(id);
+          setEditValue(node?.label || '');
+        }
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+      return; // Exit early for text nodes
+    }
+    
+    // For non-text nodes or text nodes that aren't selected, use normal drag
     const startNodes = JSON.parse(JSON.stringify(nodes)); // Deep copy initial state
     const start = { x: e.clientX, y: e.clientY };
     let currentId = id;
     let hasMoved = false; // Track if mouse moved (drag occurred)
-    let clickCount = 0; // Track click count for double-click detection
-    const clickTimer = setTimeout(() => {
-      // Single click - allow drag
-      if (clickCount === 1 && !hasMoved) {
-        // Just selection, no drag started
-      }
-      clickCount = 0;
-    }, 300); // 300ms window for double-click
     
     const move = (ev: MouseEvent) => {
       const dx = Math.abs(ev.clientX - start.x);
       const dy = Math.abs(ev.clientY - start.y);
       if (dx > 3 || dy > 3) { // Threshold to distinguish click from drag
         hasMoved = true;
-        clearTimeout(clickTimer);
+        if (editingNodeId === id) {
+          setEditingNodeId(null); // Stop editing if dragging
+        }
       }
       if (hasMoved) {
         onDrag(currentId, ev.clientX - start.x, ev.clientY - start.y);
       }
     };
     const up = () => {
-      clearTimeout(clickTimer);
       // Get current nodes state (may have been updated during drag)
-      // Use ref to get latest nodes value
       const currentNodes = nodesRef.current;
       const finalNodes = currentNodes.map((n: LayoutNode) => (n.id === currentId ? { ...n, x: snap(n.x), y: snap(n.y) } : n));
       const changed = JSON.stringify(startNodes) !== JSON.stringify(finalNodes);
@@ -248,6 +386,44 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
   };
+  
+  // Handle text editing
+  const handleTextChange = (nodeId: string, newText: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node || node.type !== 'text') return;
+    
+    // Update node label and recalculate size
+    const size = calculateTextSize(newText, 50, 40);
+    const updatedNodes = nodes.map(n => 
+      n.id === nodeId 
+        ? { ...n, label: newText, w: size.w, h: size.h }
+        : n
+    );
+    setNodes(updatedNodes);
+    setEditValue(newText);
+  };
+  
+  const handleTextSubmit = () => {
+    if (onHistorySave) {
+      const currentNodes = nodesRef.current;
+      onHistorySave(currentNodes);
+    }
+    setEditingNodeId(null);
+  };
+  
+  const handleTextCancel = (nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    setEditValue(node?.label || '');
+    setEditingNodeId(null);
+  };
+  
+  // Auto-focus textarea when editing starts
+  useEffect(() => {
+    if (editingNodeId && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.select();
+    }
+  }, [editingNodeId]);
 
 
   const handleMouseDownHandle = (e: React.MouseEvent, id: string) => {
@@ -500,8 +676,43 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
                   cursor: 'move',
                 }}
               />
-              {/* Display text */}
-              {(() => {
+              {/* Display text or editing textarea */}
+              {editingNodeId === n.id && n.type === 'text' ? (
+                <foreignObject x={0} y={0} width={adjustedW} height={adjustedH}>
+                  <textarea
+                    ref={editingNodeId === n.id ? textareaRef : null}
+                    value={editValue}
+                    onChange={(e) => handleTextChange(n.id, e.target.value)}
+                    onBlur={() => handleTextSubmit()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        handleTextCancel(n.id);
+                      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        handleTextSubmit();
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      padding: '4px',
+                      margin: 0,
+                      border: 'none',
+                      outline: 'none',
+                      background: 'transparent',
+                      fontSize: `${n.fontSize || 16}px`,
+                      fontFamily: 'Arial, sans-serif',
+                      color: n.textColor || '#000000',
+                      resize: 'none',
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      wordWrap: 'break-word',
+                    }}
+                  />
+                </foreignObject>
+              ) : (
+                (() => {
                   const labelText = n.label || n.type;
                   // Use fontSize from node if available (for text boxes), otherwise calculate based on height
                   const fontSize = n.type === 'text' && n.fontSize !== undefined 
@@ -510,21 +721,44 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
                   const lineHeight = fontSize * 1.2;
                   const padding = 4; // Minimal padding from edges (4px)
                   
-                  // Use same word wrapping logic for both text and objects
+                  // For text boxes, preserve newlines; for objects, use word wrapping
                   let lines: string[] = [];
-                  const maxChars = Math.max(4, Math.floor((adjustedW - padding * 2) / (fontSize * 0.55))); // Same calculation for both
-                  const words = String(labelText).split(/\s+/);
-                  let line = '';
-                  for (const w of words) {
-                    const test = line ? line + ' ' + w : w;
-                    if (test.length > maxChars) {
-                      lines.push(line || w);
-                      line = line ? w : '';
-                    } else {
-                      line = test;
+                  const maxChars = Math.max(4, Math.floor((adjustedW - padding * 2) / (fontSize * 0.55)));
+                  
+                  if (n.type === 'text') {
+                    // Split by newlines first to preserve them
+                    const newlineSplit = String(labelText).split('\n');
+                    newlineSplit.forEach((nlLine) => {
+                      // Then wrap each line by words if needed
+                      const words = nlLine.split(/\s+/);
+                      let line = '';
+                      for (const w of words) {
+                        const test = line ? line + ' ' + w : w;
+                        if (test.length > maxChars) {
+                          if (line) lines.push(line);
+                          line = w;
+                        } else {
+                          line = test;
+                        }
+                      }
+                      if (line) lines.push(line);
+                    });
+                  } else {
+                    // For objects, use word wrapping only
+                    const words = String(labelText).split(/\s+/);
+                    let line = '';
+                    for (const w of words) {
+                      const test = line ? line + ' ' + w : w;
+                      if (test.length > maxChars) {
+                        lines.push(line || w);
+                        line = line ? w : '';
+                      } else {
+                        line = test;
+                      }
                     }
+                    if (line) lines.push(line);
                   }
-                  if (line) lines.push(line);
+                  
                   // Limit lines based on available height
                   const maxLines = Math.max(1, Math.floor((adjustedH - padding * 2) / (lineHeight)));
                   lines = lines.slice(0, maxLines);
@@ -566,7 +800,8 @@ const LayoutCanvas = forwardRef<LayoutCanvasRef, LayoutCanvasProps>(({ nodes, se
                       )}
                     </g>
                   );
-                })()}
+                })()
+              )}
               <title>{n.label || n.type}</title>
               {/* Resize handle - only visible on hover/selection */}
               {(isSelected || isJustAdded) && (

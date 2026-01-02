@@ -1,16 +1,64 @@
+# OS files
 .DS_Store
-backend/.env
+Thumbs.db
 
+# Environment variables
+.env
+backend/.env
+*.env.local
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
 
 # Node / Vite
-.vite/
 node_modules/
 dist/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-.venv/
-
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .cursorrules
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Data and cache directories
+backend/cached_images/
+backend/dataset/
+backend/visual4math.db
+backend/simple_data.json
+
+# Test files
+*.test.py
+test_*.py
+*_test.py
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
